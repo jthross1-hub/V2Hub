@@ -1,0 +1,2525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Morph Nodes + Calc + Complaints + PCW</title>
+    <!-- Add FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --bg-color: #e0e5ec;
+            --bar-bg: #f0f3f7;
+            --shadow-light: #ffffff;
+            --shadow-dark: #a3b1c6;
+            --text-color: #7b8fa3;
+            --accent-color: #2c3e50;
+            --highlight-color: #3498db;
+            --plan-color: #8e44ad; 
+            --complaint-color: #e74c3c; 
+            --pcw-color: #e67e22; 
+            /* Standard Node size */
+            --size: 150px; 
+            --stroke-width: 20px;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            margin: 0;
+            height: 100vh;
+            overflow: hidden;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            cursor: grab;
+        }
+        
+        body.panning {
+            cursor: grabbing;
+        }
+
+        /* --- Sidebar & Overlay --- */
+        #sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 260px;
+            height: 100%;
+            background-color: var(--bg-color);
+            box-shadow: 2px 0 15px rgba(163, 177, 198, 0.3);
+            z-index: 1000;
+            transform: translateX(-100%);
+            transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+            padding: 25px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            overflow-y: auto;
+        }
+
+        #sidebar.open {
+            transform: translateX(0);
+        }
+
+        .sidebar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            color: var(--accent-color);
+            font-size: 1.4rem;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+        }
+
+        .close-sidebar-btn {
+            background: none;
+            border: none;
+            color: var(--text-color);
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: color 0.2s;
+        }
+        
+        .close-sidebar-btn:hover {
+            color: var(--accent-color);
+        }
+
+        .sidebar-section {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .sidebar-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: #95a5a6;
+            font-weight: 700;
+            letter-spacing: 1px;
+            margin-left: 5px;
+        }
+
+        .sidebar-btn {
+            padding: 12px 16px;
+            background-color: transparent;
+            border: 1px solid transparent; 
+            border-radius: 8px;
+            color: var(--text-color);
+            font-weight: 600;
+            cursor: pointer;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: none;
+            transition: all 0.2s ease;
+            font-size: 0.95rem;
+        }
+
+        .sidebar-btn:hover {
+            color: var(--accent-color);
+            background-color: rgba(0,0,0,0.05);
+            transform: translateX(4px);
+        }
+
+        .sidebar-btn:active {
+            background-color: rgba(0,0,0,0.1);
+            transform: translateX(4px) scale(0.98);
+        }
+
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(44, 62, 80, 0.2);
+            backdrop-filter: blur(2px);
+            z-index: 900;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+
+        .overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        /* --- Top Menu Bar --- */
+        #topBar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 60px;
+            background-color: var(--bar-bg);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-sizing: border-box;
+            z-index: 500;
+            border-bottom: 3px solid #d1d9e6;
+            cursor: default;
+        }
+
+        .bar-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .app-title {
+            font-weight: 800;
+            font-size: 1.2rem;
+            color: var(--accent-color);
+            letter-spacing: -0.5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .bar-actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        
+        .zoom-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-right: 15px;
+            background: rgba(0,0,0,0.03);
+            padding: 4px 12px;
+            border-radius: 12px;
+        }
+        
+        .zoom-display {
+            font-weight: 600;
+            color: var(--text-color);
+            min-width: 45px;
+            text-align: center;
+            font-size: 0.85rem;
+        }
+
+        .bar-btn {
+            background: none;
+            border: none;
+            font-size: 1.25rem;
+            color: var(--text-color);
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 10px;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+        }
+        
+        .mini-btn {
+            font-size: 1rem;
+            width: 30px;
+            height: 30px;
+            padding: 4px;
+        }
+
+        .bar-btn:hover {
+            color: var(--accent-color);
+            background-color: rgba(0,0,0,0.05);
+            transform: scale(1.05);
+        }
+
+        .bar-btn.active {
+            transform: scale(0.95);
+        }
+
+        .bar-btn.active {
+            color: var(--highlight-color);
+            background-color: rgba(52, 152, 219, 0.1);
+            box-shadow: inset 2px 2px 5px rgba(0,0,0,0.1);
+        }
+
+        /* --- Layers --- */
+        #world {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transform-origin: 0 0;
+            will-change: transform;
+            pointer-events: none;
+        }
+
+        #connectorLayer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 5;
+            pointer-events: none; 
+            overflow: visible;
+        }
+
+        .connector {
+            stroke-linecap: round;
+            fill: none;
+            opacity: 0.8;
+            transition: stroke 0.2s, stroke-width 0.2s;
+            pointer-events: stroke;
+            cursor: pointer;
+        }
+        
+        .connector:hover {
+            opacity: 1;
+            filter: drop-shadow(0 0 2px rgba(0,0,0,0.2));
+        }
+
+        .label-base {
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 14px;
+            font-weight: 700;
+            pointer-events: none;
+            text-anchor: middle;
+            dominant-baseline: middle;
+            user-select: none;
+        }
+
+        .connector-label-halo {
+            stroke: var(--bg-color); 
+            stroke-width: 14px; 
+            stroke-linejoin: round;
+            stroke-linecap: round;
+            fill: var(--bg-color);
+        }
+
+        .connector-label-text {
+            fill: var(--accent-color);
+        }
+
+        #nodeCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none; 
+        }
+
+        /* --- Node Styles --- */
+        .node-container {
+            position: absolute;
+            width: var(--size);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: grab;
+            touch-action: none; 
+            will-change: transform; 
+            z-index: 10;
+            pointer-events: auto;
+            transition: width 0.2s ease;
+        }
+
+        .node-container:active {
+            cursor: grabbing;
+            z-index: 20;
+        }
+
+        .neumorphic-shape {
+            width: var(--size);
+            height: var(--size);
+            position: relative;
+            filter: 
+                drop-shadow(-4.5px -4.5px 8px var(--shadow-light)) 
+                drop-shadow(4.5px 4.5px 8px var(--shadow-dark));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, width 0.2s ease, height 0.2s ease;
+            border-radius: 50%;
+        }
+
+        .neumorphic-shape.pressing {
+            transform: scale(0.96);
+        }
+
+        /* Inner Text Area for Shapes - Tighter Confinement */
+        .shape-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 60%; /* Tighter width to fit inside triangles/diamonds */
+            height: 60%;
+            background: transparent;
+            border: none;
+            resize: none;
+            text-align: center;
+            color: var(--accent-color);
+            font-family: 'Segoe UI', sans-serif;
+            font-weight: 600;
+            font-size: 0.9rem;
+            line-height: 1.2;
+            outline: none;
+            z-index: 25;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 0;
+            box-sizing: border-box;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            pointer-events: none; 
+            transition: background 0.2s;
+        }
+        
+        .shape-text.editing {
+            pointer-events: auto;
+            background: rgba(255, 255, 255, 0.25);
+            border-radius: 8px;
+            cursor: text;
+        }
+        
+        .shape-text::placeholder {
+            color: rgba(123, 143, 163, 0.4);
+        }
+
+        .status-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            width: 32px;
+            height: 32px;
+            background: #2ecc71;
+            border-radius: 50%;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            opacity: 0;
+            transform: scale(0.5);
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 3px 3px 6px rgba(0,0,0,0.15);
+            z-index: 15;
+            pointer-events: none;
+        }
+
+        .node-container.completed .status-badge {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .node-container.selected-source .neumorphic-shape,
+        .node-container.selected-source.calculator-node,
+        .node-container.selected-source.plan-node,
+        .node-container.selected-source.complaint-node,
+        .node-container.selected-source.post-call-node {
+            box-shadow: 0 0 0 4px var(--highlight-color); 
+        }
+
+        svg {
+            width: 100%;
+            height: 100%;
+            overflow: visible; 
+            pointer-events: none;
+        }
+
+        polygon {
+            fill: var(--bg-color);
+            stroke: var(--bg-color);
+            stroke-width: var(--stroke-width);
+            stroke-linejoin: round;
+            transition: fill 0.3s ease, stroke 0.3s ease;
+        }
+
+        .label {
+            margin-top: 50px;
+            color: var(--text-color);
+            font-size: 1.2rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            font-weight: 600;
+            transition: opacity 0.3s, border-bottom 0.2s;
+            pointer-events: auto; 
+            text-align: center;
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid transparent;
+            width: 160px;
+            outline: none;
+            font-family: inherit;
+        }
+        
+        .label:focus {
+            border-bottom: 2px solid var(--highlight-color);
+            color: var(--accent-color);
+        }
+
+        /* --- CALCULATOR NODE STYLES --- */
+        .node-container.calculator-node {
+            width: 200px; 
+            height: auto;
+            min-height: 280px;
+            background: var(--bg-color);
+            border-radius: 20px;
+            padding: 15px;
+            box-sizing: border-box;
+            box-shadow: -6px -6px 12px var(--shadow-light), 
+                         6px 6px 12px var(--shadow-dark);
+            display: block; 
+        }
+
+        .calculator-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            height: 100%;
+            width: 100%;
+        }
+
+        .calc-display {
+            width: 100%;
+            height: 45px;
+            background: #f0f3f7;
+            border-radius: 10px;
+            box-shadow: inset 3px 3px 6px var(--shadow-dark),
+                        inset -3px -3px 6px var(--shadow-light);
+            border: none;
+            text-align: right;
+            padding: 0 15px;
+            font-family: 'Segoe UI', monospace;
+            font-size: 1.4rem;
+            color: var(--accent-color);
+            box-sizing: border-box;
+            outline: none;
+        }
+
+        .calc-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            flex-grow: 1;
+        }
+
+        .calc-btn {
+            border: none;
+            background: var(--bg-color);
+            border-radius: 8px;
+            aspect-ratio: 1; /* Square buttons */
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-color);
+            box-shadow: -3px -3px 6px var(--shadow-light), 
+                         3px 3px 6px var(--shadow-dark);
+            cursor: pointer;
+            transition: all 0.1s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .calc-btn:active {
+            box-shadow: inset 3px 3px 6px var(--shadow-dark), 
+                        inset -3px -3px 6px var(--shadow-light);
+            color: var(--highlight-color);
+            transform: scale(0.95);
+        }
+
+        .calc-btn.accent {
+            color: var(--highlight-color);
+        }
+        
+        .calc-btn.equal {
+            background-color: var(--highlight-color);
+            color: white;
+            box-shadow: -3px -3px 6px rgba(255,255,255,0.2), 
+                         3px 3px 6px rgba(0,0,0,0.2);
+        }
+        
+        .calc-btn.double-width {
+            grid-column: span 2;
+            aspect-ratio: auto;
+        }
+
+        /* --- PLAN CALCULATOR STYLES --- */
+        .node-container.plan-node {
+            width: 240px; 
+            height: auto;
+            min-height: 320px;
+            background: var(--bg-color);
+            border-radius: 20px;
+            padding: 20px;
+            box-sizing: border-box;
+            box-shadow: -6px -6px 12px var(--shadow-light), 
+                         6px 6px 12px var(--shadow-dark);
+            display: block;
+        }
+
+        .plan-header {
+            text-align: center;
+            font-weight: 800;
+            color: var(--plan-color);
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 0.9rem;
+        }
+
+        .input-group {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .input-group label {
+            font-size: 0.85rem;
+            color: var(--text-color);
+            font-weight: 600;
+        }
+
+        .plan-input {
+            width: 100px;
+            padding: 6px 10px;
+            border-radius: 8px;
+            border: none;
+            background: #f0f3f7;
+            box-shadow: inset 2px 2px 5px var(--shadow-dark),
+                        inset -2px -2px 5px var(--shadow-light);
+            color: var(--accent-color);
+            font-weight: 600;
+            font-size: 0.9rem;
+            text-align: right;
+            outline: none;
+        }
+
+        .plan-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .plan-actions .full-width {
+            grid-column: span 2;
+        }
+
+        .plan-btn {
+            padding: 10px;
+            border: none;
+            background: var(--bg-color);
+            border-radius: 8px;
+            color: var(--text-color);
+            font-size: 0.8rem;
+            font-weight: 700;
+            box-shadow: -3px -3px 6px var(--shadow-light), 
+                         3px 3px 6px var(--shadow-dark);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .plan-btn:active {
+            box-shadow: inset 3px 3px 6px var(--shadow-dark), 
+                        inset -3px -3px 6px var(--shadow-light);
+            color: var(--plan-color);
+        }
+
+        .plan-result {
+            margin-top: 15px;
+            padding: 12px;
+            background: rgba(142, 68, 173, 0.1);
+            border-radius: 10px;
+            color: var(--plan-color);
+            text-align: center;
+            font-weight: 700;
+            font-size: 1rem;
+            min-height: 24px;
+        }
+
+        /* --- COMPLAINT NODE STYLES --- */
+        .node-container.complaint-node {
+            width: 250px;
+            height: auto;
+            min-height: 300px;
+            max-height: 500px; 
+            background: var(--bg-color);
+            border-radius: 20px;
+            padding: 20px;
+            box-sizing: border-box;
+            box-shadow: -6px -6px 12px var(--shadow-light), 
+                         6px 6px 12px var(--shadow-dark);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .complaint-header {
+            text-align: center;
+            font-weight: 800;
+            color: var(--complaint-color);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 0.9rem;
+            margin-bottom: 5px;
+        }
+
+        .complaint-input-wrapper {
+            display: flex;
+            gap: 8px;
+        }
+
+        .complaint-input {
+            flex-grow: 1;
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: none;
+            background: #f0f3f7;
+            box-shadow: inset 2px 2px 5px var(--shadow-dark),
+                        inset -2px -2px 5px var(--shadow-light);
+            color: var(--accent-color);
+            font-size: 0.9rem;
+            outline: none;
+        }
+        
+        .add-complaint-btn {
+            width: 36px;
+            border: none;
+            background: var(--bg-color);
+            border-radius: 8px;
+            color: var(--complaint-color);
+            font-size: 1rem;
+            box-shadow: -3px -3px 6px var(--shadow-light), 
+                         3px 3px 6px var(--shadow-dark);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .add-complaint-btn:active {
+            box-shadow: inset 3px 3px 6px var(--shadow-dark), 
+                        inset -3px -3px 6px var(--shadow-light);
+        }
+
+        .complaint-list {
+            flex-grow: 1;
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            min-height: 100px;
+        }
+
+        .complaint-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(255,255,255,0.4);
+            padding: 8px 10px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            color: var(--text-color);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .complaint-item:hover {
+            background: rgba(255,255,255,0.7);
+        }
+
+        .complaint-text {
+            flex-grow: 1;
+            margin-right: 10px;
+            word-break: break-word;
+        }
+
+        .complaint-item.resolved .complaint-text {
+            text-decoration: line-through;
+            color: #bdc3c7;
+        }
+        
+        .complaint-item.resolved {
+            background: rgba(46, 204, 113, 0.1);
+        }
+
+        .del-complaint-btn {
+            background: none;
+            border: none;
+            color: #e74c3c;
+            cursor: pointer;
+            font-size: 0.9rem;
+            opacity: 0.5;
+            transition: opacity 0.2s;
+            padding: 2px;
+        }
+
+        .del-complaint-btn:hover {
+            opacity: 1;
+        }
+
+        /* --- POST CALL WORK NODE STYLES --- */
+        .node-container.post-call-node {
+            width: 280px;
+            height: auto;
+            min-height: 380px;
+            background: var(--bg-color);
+            border-radius: 20px;
+            padding: 20px;
+            box-sizing: border-box;
+            box-shadow: -6px -6px 12px var(--shadow-light), 
+                         6px 6px 12px var(--shadow-dark);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .pcw-header {
+            text-align: center;
+            font-weight: 800;
+            color: var(--pcw-color);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 0.9rem;
+        }
+
+        .pcw-section-label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--text-color);
+            margin-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .pcw-textarea {
+            width: 100%;
+            height: 60px;
+            padding: 10px;
+            border-radius: 8px;
+            border: none;
+            background: #f0f3f7;
+            box-shadow: inset 2px 2px 5px var(--shadow-dark),
+                        inset -2px -2px 5px var(--shadow-light);
+            color: var(--accent-color);
+            font-family: inherit;
+            font-size: 0.9rem;
+            resize: none;
+            outline: none;
+            box-sizing: border-box;
+        }
+
+        .pcw-select {
+            width: 100%;
+            padding: 8px;
+            border-radius: 8px;
+            border: none;
+            background: #f0f3f7;
+            box-shadow: -2px -2px 5px var(--shadow-light), 
+                         2px 2px 5px var(--shadow-dark);
+            color: var(--accent-color);
+            font-weight: 600;
+            outline: none;
+        }
+
+        .pcw-list-container {
+            background: rgba(255,255,255,0.4);
+            border-radius: 8px;
+            padding: 10px;
+            min-height: 60px;
+            max-height: 120px;
+            overflow-y: auto;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .pcw-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            font-size: 0.85rem;
+            color: var(--accent-color);
+        }
+
+        .pcw-list li {
+            margin-bottom: 6px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+        }
+
+        .pcw-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .pcw-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .pcw-sync-btn {
+            background: none;
+            border: none;
+            color: var(--pcw-color);
+            font-size: 0.8rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .pcw-sync-btn:hover {
+            transform: scale(1.1);
+        }
+
+        .pcw-sync-btn:active {
+            transform: scale(0.95);
+        }
+        
+        .pcw-copy-btn {
+            background: none;
+            border: none;
+            color: var(--text-color);
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: transform 0.2s, color 0.2s;
+            padding: 2px;
+        }
+        
+        .pcw-copy-btn:hover {
+            color: var(--accent-color);
+            transform: scale(1.1);
+        }
+
+
+        /* --- Context Menu Styles --- */
+        #contextMenu {
+            position: absolute;
+            display: none;
+            background-color: var(--bg-color);
+            padding: 15px;
+            border-radius: 20px;
+            border: 2px solid #bdc3c7;
+            z-index: 2000;
+            min-width: 180px;
+            flex-direction: column;
+            gap: 5px; 
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            transform-origin: top left;
+            pointer-events: auto;
+            cursor: default;
+        }
+
+        #contextMenu.visible {
+            display: flex;
+            animation: bounceIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes bounceIn {
+            0% { opacity: 0; transform: scale(0.5); }
+            60% { opacity: 1; transform: scale(1.05); }
+            80% { transform: scale(0.95); }
+            100% { transform: scale(1); }
+        }
+
+        .menu-section-title {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: #95a5a6;
+            margin: 5px 10px;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        .menu-item {
+            padding: 10px 15px;
+            color: var(--text-color);
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 8px;
+            text-align: left;
+            transition: all 0.2s ease;
+            background-color: transparent;
+            position: relative;
+        }
+
+        .menu-item:hover {
+            color: #55677d;
+            background-color: rgba(255,255,255,0.5);
+        }
+
+        .has-submenu {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .has-submenu::after {
+            content: '\f0da';
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+            margin-left: 10px;
+            font-size: 0.8rem;
+        }
+
+        .submenu {
+            position: absolute;
+            left: 100%;
+            top: -5px;
+            background-color: var(--bg-color);
+            border: 2px solid #bdc3c7;
+            border-radius: 15px;
+            padding: 15px;
+            display: none;
+            min-width: 160px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            margin-left: 10px;
+            z-index: 700;
+        }
+        
+        .submenu::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -15px; 
+            width: 15px;
+            height: 100%;
+            background: transparent;
+        }
+
+        .menu-item:hover .submenu {
+            display: block;
+            animation: fadeIn 0.2s ease;
+        }
+        
+        .separator {
+            height: 1px;
+            background-color: #d1d9e6;
+            margin: 5px 0;
+            width: 100%;
+        }
+
+        .color-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .color-swatch {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid rgba(255,255,255,0.5);
+            box-shadow: 2px 2px 5px rgba(163, 177, 198, 0.4);
+            transition: transform 0.2s ease, border-color 0.2s;
+        }
+
+        .color-swatch:hover {
+            transform: scale(1.15);
+            border-color: #fff;
+        }
+        
+        input[type="number"], input[type="text"] {
+            font-family: inherit;
+            color: var(--text-color);
+            background: rgba(255,255,255,0.5);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+
+    <nav id="topBar">
+        <div class="bar-left">
+            <button class="bar-btn" id="menuBtn" title="Menu">
+                <i class="fa-solid fa-bars"></i>
+            </button>
+            <div class="app-title">CREDIT FLOW</div>
+        </div>
+        <div class="bar-actions">
+            <div class="zoom-controls">
+                <button class="bar-btn mini-btn" id="zoomOutBtn" title="Zoom Out"><i class="fa-solid fa-minus"></i></button>
+                <div class="zoom-display" id="zoomDisplay">100%</div>
+                <button class="bar-btn mini-btn" id="zoomInBtn" title="Zoom In"><i class="fa-solid fa-plus"></i></button>
+            </div>
+
+            <button class="bar-btn" id="linkBtn" title="Connect Nodes">
+                <i class="fa-solid fa-link"></i>
+            </button>
+            <button class="bar-btn" id="clearBtn" title="Clear All">
+                <i class="fa-regular fa-trash-can"></i>
+            </button>
+            <button class="bar-btn" id="addNodeBtn" title="Add Node">
+                <i class="fa-regular fa-square-plus"></i>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Sidebar -->
+    <div class="overlay" id="overlay"></div>
+    <aside id="sidebar">
+        <div class="sidebar-header">
+            <span>Tools</span>
+            <button class="close-sidebar-btn" id="closeSidebarBtn"><i class="fa-solid fa-times"></i></button>
+        </div>
+        
+        <div class="sidebar-section">
+            <div class="sidebar-label">Actions</div>
+            <button class="sidebar-btn" id="sideAddBtn">
+                <i class="fa-regular fa-square-plus"></i> Add Shape Node
+            </button>
+            <button class="sidebar-btn" id="sideAddCalcBtn">
+                <i class="fa-solid fa-calculator"></i> Add Calculator
+            </button>
+            <button class="sidebar-btn" id="sideAddPlanBtn">
+                <i class="fa-solid fa-file-invoice-dollar"></i> Add Plan Calc
+            </button>
+            <button class="sidebar-btn" id="sideAddComplaintBtn">
+                <i class="fa-solid fa-clipboard-list"></i> Complaint Tracker
+            </button>
+            <button class="sidebar-btn" id="sideAddPCWBtn">
+                <i class="fa-solid fa-headset"></i> Post Call Work
+            </button>
+            <button class="sidebar-btn" id="sideClearBtn">
+                <i class="fa-regular fa-trash-can"></i> Clear Canvas
+            </button>
+        </div>
+
+        <div class="separator"></div>
+
+        <div class="sidebar-section" id="shapeList">
+            <div class="sidebar-label">Create Shape</div>
+            <!-- Shapes injected here -->
+        </div>
+    </aside>
+
+    <!-- Wrap canvas layers in a world container for Pan/Zoom -->
+    <div id="world">
+        <svg id="connectorLayer">
+            <defs id="connectorDefs"></defs>
+        </svg>
+        <div id="nodeCanvas">
+            <!-- Nodes injected here -->
+        </div>
+    </div>
+
+    <!-- Right Click Menu -->
+    <div id="contextMenu"></div>
+
+    <script>
+        const nodeCanvas = document.getElementById('nodeCanvas');
+        const connectorLayer = document.getElementById('connectorLayer');
+        const contextMenu = document.getElementById('contextMenu');
+        const addNodeBtn = document.getElementById('addNodeBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const linkBtn = document.getElementById('linkBtn');
+        const world = document.getElementById('world');
+        const zoomDisplay = document.getElementById('zoomDisplay');
+        const zoomInBtn = document.getElementById('zoomInBtn');
+        const zoomOutBtn = document.getElementById('zoomOutBtn');
+        
+        // Sidebar Elements
+        const menuBtn = document.getElementById('menuBtn');
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('overlay');
+        const closeSidebarBtn = document.getElementById('closeSidebarBtn');
+        const sideAddBtn = document.getElementById('sideAddBtn');
+        const sideAddCalcBtn = document.getElementById('sideAddCalcBtn');
+        const sideAddPlanBtn = document.getElementById('sideAddPlanBtn');
+        const sideAddComplaintBtn = document.getElementById('sideAddComplaintBtn');
+        const sideAddPCWBtn = document.getElementById('sideAddPCWBtn');
+        const sideClearBtn = document.getElementById('sideClearBtn');
+        const shapeList = document.getElementById('shapeList');
+
+        const POINT_COUNT = 64; 
+
+        // State Management
+        const nodeData = new WeakMap();
+        const connectionData = new WeakMap(); 
+        const connections = []; 
+
+        const globalState = {
+            draggingNode: null,
+            startX: 0,
+            startY: 0,
+            initialNodeX: 0,
+            initialNodeY: 0,
+            dragDistance: 0,
+            contextMenuTarget: null,
+            contextMenuType: null,
+            connectionMode: false,
+            connectionSource: null,
+            
+            // Viewport State
+            viewX: 0,
+            viewY: 0,
+            zoom: 1,
+            isPanning: false,
+            panStartX: 0,
+            panStartY: 0
+        };
+
+        const palettes = [
+            '#e0e5ec', '#FF6B6B', '#4ECDC4', '#FFE66D', 
+            '#9B59B6', '#34495e', '#E17055', '#00b894', '#2d3436'
+        ];
+
+        // --- Helper: Coordinate Conversion ---
+        function screenToWorld(sx, sy) {
+            return {
+                x: (sx - globalState.viewX) / globalState.zoom,
+                y: (sy - globalState.viewY) / globalState.zoom
+            };
+        }
+
+        // --- Viewport Logic (Pan & Zoom) ---
+        function updateTransform() {
+            world.style.transform = `translate(${globalState.viewX}px, ${globalState.viewY}px) scale(${globalState.zoom})`;
+            zoomDisplay.innerText = Math.round(globalState.zoom * 100) + '%';
+        }
+
+        function setZoom(newZoom, centerX, centerY) {
+            const minZoom = 0.1;
+            const maxZoom = 5;
+            newZoom = Math.min(Math.max(newZoom, minZoom), maxZoom);
+
+            if (centerX === undefined) {
+                centerX = window.innerWidth / 2;
+                centerY = window.innerHeight / 2;
+            }
+
+            const wx = (centerX - globalState.viewX) / globalState.zoom;
+            const wy = (centerY - globalState.viewY) / globalState.zoom;
+
+            globalState.zoom = newZoom;
+
+            globalState.viewX = centerX - wx * globalState.zoom;
+            globalState.viewY = centerY - wy * globalState.zoom;
+
+            updateTransform();
+        }
+
+        window.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomSensitivity = 0.001;
+            const newZoom = globalState.zoom - e.deltaY * zoomSensitivity * globalState.zoom;
+            setZoom(newZoom, e.clientX, e.clientY);
+        }, { passive: false });
+
+        zoomInBtn.addEventListener('click', () => setZoom(globalState.zoom * 1.2));
+        zoomOutBtn.addEventListener('click', () => setZoom(globalState.zoom / 1.2));
+
+        // --- Sidebar Logic ---
+        function toggleSidebar() {
+            sidebar.classList.toggle('open');
+            overlay.classList.toggle('active');
+        }
+
+        menuBtn.addEventListener('click', toggleSidebar);
+        closeSidebarBtn.addEventListener('click', toggleSidebar);
+        overlay.addEventListener('click', toggleSidebar);
+
+        sideAddBtn.addEventListener('click', () => {
+            const winW = window.innerWidth;
+            const winH = window.innerHeight;
+            const center = screenToWorld(winW/2, winH/2);
+            createNode(center.x - 75, center.y - 75);
+            toggleSidebar();
+        });
+
+        sideAddCalcBtn.addEventListener('click', () => {
+            const winW = window.innerWidth;
+            const winH = window.innerHeight;
+            const center = screenToWorld(winW/2, winH/2);
+            createNode(center.x - 100, center.y - 140, 0, 'calculator');
+            toggleSidebar();
+        });
+
+        sideAddPlanBtn.addEventListener('click', () => {
+            const winW = window.innerWidth;
+            const winH = window.innerHeight;
+            const center = screenToWorld(winW/2, winH/2);
+            createNode(center.x - 120, center.y - 160, 0, 'plan');
+            toggleSidebar();
+        });
+
+        sideAddComplaintBtn.addEventListener('click', () => {
+            const winW = window.innerWidth;
+            const winH = window.innerHeight;
+            const center = screenToWorld(winW/2, winH/2);
+            createNode(center.x - 125, center.y - 150, 0, 'complaint');
+            toggleSidebar();
+        });
+
+        sideAddPCWBtn.addEventListener('click', () => {
+            const winW = window.innerWidth;
+            const winH = window.innerHeight;
+            const center = screenToWorld(winW/2, winH/2);
+            createNode(center.x - 140, center.y - 175, 0, 'postCall');
+            toggleSidebar();
+        });
+
+        sideClearBtn.addEventListener('click', () => {
+            if(confirm("Clear all nodes?")) {
+                nodeCanvas.innerHTML = '';
+                connectorLayer.innerHTML = '<defs id="connectorDefs"></defs>';
+                connections.length = 0; 
+            }
+            toggleSidebar();
+        });
+
+        // --- Shapes ---
+        function distributePoints(vertices) {
+            const points = [];
+            const pointsPerVertex = Math.floor(POINT_COUNT / vertices.length);
+            const remainder = POINT_COUNT % vertices.length;
+            vertices.forEach((v, index) => {
+                const count = pointsPerVertex + (index < remainder ? 1 : 0);
+                for (let i = 0; i < count; i++) points.push({...v});
+            });
+            return points;
+        }
+
+        function getCirclePoints(cx, cy, r) {
+            const points = [];
+            for (let i = 0; i < POINT_COUNT; i++) {
+                const angle = -Math.PI / 2 + (i * (Math.PI * 2) / POINT_COUNT);
+                points.push({
+                    x: cx + r * Math.cos(angle),
+                    y: cy + r * Math.sin(angle)
+                });
+            }
+            return points;
+        }
+
+        function getPillPoints(x, y, width, height) {
+            const points = [];
+            const r = width / 2;
+            const straightH = height - width;
+            const cyTop = y - straightH / 2;
+            const cyBottom = y + straightH / 2;
+            for(let i=0; i<12; i++) points.push({ x: x + r, y: cyTop + (i/12)*straightH });
+            for(let i=0; i<20; i++) {
+                const ang = (i/20) * Math.PI;
+                points.push({ x: x + r*Math.cos(ang), y: cyBottom + r*Math.sin(ang) });
+            }
+            for(let i=0; i<12; i++) points.push({ x: x - r, y: cyBottom - (i/12)*straightH });
+            for(let i=0; i<20; i++) {
+                const ang = Math.PI + (i/20) * Math.PI;
+                points.push({ x: x + r*Math.cos(ang), y: cyTop + r*Math.sin(ang) });
+            }
+            return points;
+        }
+
+        const shapes = [
+            { name: "Triangle", icon: "fa-play", coords: distributePoints([{x: 100, y: 30}, {x: 170, y: 160}, {x: 30, y: 160}]) },
+            { name: "Trapezoid", icon: "fa-vector-square", coords: distributePoints([{x: 140, y: 60}, {x: 170, y: 140}, {x: 30, y: 140}, {x: 60, y: 60}]) },
+            { name: "Diamond", icon: "fa-gem", coords: distributePoints([{x: 100, y: 20}, {x: 180, y: 100}, {x: 100, y: 180}, {x: 20, y: 100}]) },
+            { name: "Circle", icon: "fa-circle", coords: getCirclePoints(100, 100, 70) },
+            { name: "Square", icon: "fa-square", coords: distributePoints([{x: 160, y: 40}, {x: 160, y: 160}, {x: 40, y: 160}, {x: 40, y: 40}]) },
+            { name: "Squircle", icon: "fa-square-full", coords: distributePoints([{x: 160, y: 40}, {x: 168, y: 100}, {x: 160, y: 160}, {x: 100, y: 168}, {x: 40, y: 160}, {x: 32, y: 100}, {x: 40, y: 40}, {x: 100, y: 32}]) },
+            { name: "Rectangle", icon: "fa-stop", coords: distributePoints([{x: 170, y: 60}, {x: 170, y: 140}, {x: 30, y: 140}, {x: 30, y: 60}]) },
+            { name: "Capsule", icon: "fa-capsules", coords: getPillPoints(100, 100, 80, 160) }
+        ];
+
+        // Fill Sidebar Shape List
+        shapes.forEach((s, idx) => {
+            const btn = document.createElement('button');
+            btn.className = 'sidebar-btn';
+            btn.innerHTML = `<i class="fa-solid ${s.icon || 'fa-shapes'}"></i> ${s.name}`;
+            btn.onclick = () => {
+                const winW = window.innerWidth;
+                const winH = window.innerHeight;
+                const center = screenToWorld(winW/2, winH/2);
+                createNode(center.x - 75, center.y - 75, idx);
+                toggleSidebar();
+            };
+            shapeList.appendChild(btn);
+        });
+
+        // --- Node Factory ---
+        function createNode(x, y, shapeIdx = 0, type = 'shape') {
+            const node = document.createElement('div');
+            node.className = 'node-container';
+            if (type === 'calculator') node.classList.add('calculator-node');
+            if (type === 'plan') node.classList.add('plan-node');
+            if (type === 'complaint') node.classList.add('complaint-node');
+            if (type === 'postCall') node.classList.add('post-call-node');
+            
+            node.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+
+            let contentHTML = '';
+            
+            if (type === 'shape') {
+                contentHTML = `
+                    <div class="neumorphic-shape">
+                        <svg viewBox="0 0 200 200">
+                            <polygon points="" />
+                        </svg>
+                        <div class="status-badge"><i class="fa-solid fa-check"></i></div>
+                        <textarea class="shape-text no-drag" placeholder="Type here..."></textarea>
+                    </div>
+                    <input type="text" class="label no-drag" value="Triangle">
+                `;
+            } else if (type === 'calculator') {
+                contentHTML = `
+                    <div class="calculator-wrapper">
+                        <input type="text" class="calc-display no-drag" readonly value="0">
+                        <div class="calc-grid">
+                            <button class="calc-btn no-drag accent" data-op="clear">C</button>
+                            <button class="calc-btn no-drag accent" data-op="inv">±</button>
+                            <button class="calc-btn no-drag accent" data-op="percent">%</button>
+                            <button class="calc-btn no-drag accent" data-val="/">÷</button>
+                            
+                            <button class="calc-btn no-drag" data-val="7">7</button>
+                            <button class="calc-btn no-drag" data-val="8">8</button>
+                            <button class="calc-btn no-drag" data-val="9">9</button>
+                            <button class="calc-btn no-drag accent" data-val="*">×</button>
+                            
+                            <button class="calc-btn no-drag" data-val="4">4</button>
+                            <button class="calc-btn no-drag" data-val="5">5</button>
+                            <button class="calc-btn no-drag" data-val="6">6</button>
+                            <button class="calc-btn no-drag accent" data-val="-">−</button>
+                            
+                            <button class="calc-btn no-drag" data-val="1">1</button>
+                            <button class="calc-btn no-drag" data-val="2">2</button>
+                            <button class="calc-btn no-drag" data-val="3">3</button>
+                            <button class="calc-btn no-drag accent" data-val="+">+</button>
+                            
+                            <button class="calc-btn no-drag double-width" data-val="0">0</button>
+                            <button class="calc-btn no-drag" data-val=".">.</button>
+                            <button class="calc-btn no-drag equal" data-op="equal">=</button>
+                        </div>
+                    </div>
+                `;
+            } else if (type === 'plan') {
+                contentHTML = `
+                    <div class="plan-header">Rolling Plan Calc</div>
+                    <div class="input-group">
+                        <label>Balance (B₀)</label>
+                        <input type="number" class="plan-input no-drag" id="p-bal" placeholder="300">
+                    </div>
+                    <div class="input-group">
+                        <label>Payment (Pₙ)</label>
+                        <input type="number" class="plan-input no-drag" id="p-pay" placeholder="40">
+                    </div>
+                    <div class="input-group">
+                        <label>Interest % (r)</label>
+                        <input type="number" class="plan-input no-drag" id="p-int" placeholder="0" value="0">
+                    </div>
+                     <div class="input-group">
+                        <label>Target Mos (N)</label>
+                        <input type="number" class="plan-input no-drag" id="p-mos" placeholder="6">
+                    </div>
+                    <div class="plan-actions">
+                        <button class="plan-btn full-width no-drag" data-action="next">Next Bal (Rollover)</button>
+                        <button class="plan-btn no-drag" data-action="time">Time?</button>
+                        <button class="plan-btn no-drag" data-action="target">Req. Pay?</button>
+                    </div>
+                    <div class="plan-result">Result: -</div>
+                `;
+            } else if (type === 'complaint') {
+                contentHTML = `
+                    <div class="complaint-header">Complaint Tracker</div>
+                    <div class="complaint-input-wrapper">
+                        <input type="text" class="complaint-input no-drag" placeholder="Add complaint...">
+                        <button class="add-complaint-btn no-drag"><i class="fa-solid fa-plus"></i></button>
+                    </div>
+                    <ul class="complaint-list no-drag">
+                        <!-- Items go here -->
+                    </ul>
+                `;
+            } else if (type === 'postCall') {
+                contentHTML = `
+                    <div class="pcw-header">Post Call Work</div>
+                    <div>
+                        <div class="pcw-section-label">Agent Notes</div>
+                        <textarea class="pcw-textarea no-drag" placeholder="Type call notes..."></textarea>
+                    </div>
+                    <div>
+                        <div class="pcw-section-label">Disposition</div>
+                        <select class="pcw-select no-drag">
+                            <option value="resolved">Resolved</option>
+                            <option value="escalated">Escalated</option>
+                            <option value="callback">Callback Required</option>
+                            <option value="info">Info Provided</option>
+                        </select>
+                    </div>
+                    <div>
+                        <div class="pcw-section-label">
+                            Flow Summary
+                            <div class="pcw-actions">
+                                <button class="pcw-copy-btn no-drag" title="Copy Text"><i class="fa-regular fa-copy"></i></button>
+                                <button class="pcw-sync-btn no-drag" title="Import Data"><i class="fa-solid fa-rotate"></i> Sync</button>
+                            </div>
+                        </div>
+                        <div class="pcw-list-container no-drag">
+                            <ul class="pcw-list">
+                                <li style="color:#aaa; font-style:italic;">No data imported.</li>
+                            </ul>
+                        </div>
+                    </div>
+                `;
+            }
+
+            node.innerHTML = contentHTML;
+            nodeCanvas.appendChild(node);
+
+            // Logic Init
+            if (type === 'shape') {
+                const initialState = {
+                    x: x, y: y, type: 'shape',
+                    shapeIndex: shapeIdx, 
+                    color: palettes[0],
+                    isCompleted: false, 
+                    currentPoints: JSON.parse(JSON.stringify(shapes[shapeIdx].coords)),
+                    animationFrame: null
+                };
+                nodeData.set(node, initialState);
+
+                const poly = node.querySelector('polygon');
+                const pointsStr = initialState.currentPoints.map(p => `${p.x},${p.y}`).join(' ');
+                poly.setAttribute('points', pointsStr);
+                
+                const label = node.querySelector('.label');
+                label.value = shapes[shapeIdx].name;
+
+                // --- AUTO EXPANSION LOGIC ---
+                const textarea = node.querySelector('.shape-text');
+                const shapeContainer = node.querySelector('.neumorphic-shape');
+                
+                // Create a hidden "ghost" element to measure text height
+                const ghost = document.createElement('div');
+                ghost.style.cssText = `
+                    position: absolute;
+                    visibility: hidden;
+                    height: auto;
+                    width: 60%; /* Match reduced width relative to container */
+                    font-family: 'Segoe UI', sans-serif;
+                    font-weight: 600;
+                    font-size: 0.9rem;
+                    line-height: 1.2;
+                    white-space: pre-wrap;
+                    word-wrap: break-word;
+                    padding: 0;
+                    left: 50%;
+                    transform: translateX(-50%);
+                `;
+                shapeContainer.appendChild(ghost);
+
+                // Stop drag propagation for inputs
+                const stopDrag = (e) => e.stopPropagation();
+                label.addEventListener('mousedown', stopDrag);
+                textarea.addEventListener('mousedown', stopDrag);
+
+                // Input Listener for Expansion
+                textarea.addEventListener('input', () => {
+                    // Sync ghost text to measure height
+                    ghost.innerText = textarea.value + '\u200b'; 
+                    
+                    // Base Text Height = 150 * 0.6 = 90px (approx height of text area)
+                    // We measure width against base size (150px) to determine scale
+                    ghost.style.width = (150 * 0.6) + 'px'; 
+                    const neededHeight = ghost.offsetHeight;
+                    const baseTextHeight = 150 * 0.6; // 90px
+                    
+                    let newSize = 150;
+                    
+                    if (neededHeight > baseTextHeight) {
+                        // Calculate scale ratio based on height needs
+                        newSize = 150 * (neededHeight / baseTextHeight);
+                        newSize += 20; 
+                    }
+                    
+                    // Apply new size using CSS variable
+                    node.style.setProperty('--size', newSize + 'px');
+                });
+
+                // Auto-save behavior: Remove editing class on blur
+                textarea.addEventListener('blur', () => {
+                    textarea.classList.remove('editing');
+                });
+
+                setNodeColor(node, initialState.color);
+            } else if (type === 'calculator') {
+                const initialState = {
+                    x: x, y: y, type: 'calculator',
+                    color: palettes[0]
+                };
+                nodeData.set(node, initialState);
+                initCalculatorLogic(node);
+            } else if (type === 'plan') {
+                const initialState = {
+                    x: x, y: y, type: 'plan',
+                    color: '#e0e5ec'
+                };
+                nodeData.set(node, initialState);
+                initPlanLogic(node);
+            } else if (type === 'complaint') {
+                const initialState = {
+                    x: x, y: y, type: 'complaint',
+                    color: '#e0e5ec'
+                };
+                nodeData.set(node, initialState);
+                initComplaintLogic(node);
+            } else if (type === 'postCall') {
+                const initialState = {
+                    x: x, y: y, type: 'postCall',
+                    color: '#e0e5ec'
+                };
+                nodeData.set(node, initialState);
+                initPostCallLogic(node);
+            }
+
+            return node;
+        }
+
+        function setNodeColor(node, color) {
+            const data = nodeData.get(node);
+            if (data.type === 'shape') {
+                const poly = node.querySelector('polygon');
+                poly.style.fill = color;
+                poly.style.stroke = color;
+            } else {
+                node.style.backgroundColor = color;
+            }
+        }
+
+        function initCalculatorLogic(node) {
+            const display = node.querySelector('.calc-display');
+            const buttons = node.querySelectorAll('.calc-btn');
+            let currentInput = '0';
+            let previousInput = '';
+            let operation = null;
+            let resetNext = false;
+
+            function updateDisplay() {
+                display.value = currentInput.substring(0, 10);
+            }
+
+            buttons.forEach(btn => {
+                btn.addEventListener('mousedown', (e) => e.stopPropagation()); // prevent drag start
+                btn.addEventListener('click', (e) => {
+                    const val = btn.dataset.val;
+                    const op = btn.dataset.op;
+
+                    if (val !== undefined) {
+                        if (currentInput === '0' || resetNext) {
+                            currentInput = val;
+                            resetNext = false;
+                        } else {
+                            currentInput += val;
+                        }
+                    } else if (op === 'clear') {
+                        currentInput = '0';
+                        previousInput = '';
+                        operation = null;
+                    } else if (op === 'inv') {
+                        currentInput = String(parseFloat(currentInput) * -1);
+                    } else if (op === 'percent') {
+                        currentInput = String(parseFloat(currentInput) / 100);
+                    } else if (op === 'equal') {
+                        if (operation && previousInput) {
+                            const prev = parseFloat(previousInput);
+                            const curr = parseFloat(currentInput);
+                            let result = 0;
+                            switch(operation) {
+                                case '+': result = prev + curr; break;
+                                case '-': result = prev - curr; break;
+                                case '*': result = prev * curr; break;
+                                case '/': result = prev / curr; break;
+                            }
+                            currentInput = String(result);
+                            operation = null;
+                            resetNext = true;
+                        }
+                    } else if (['+','-','*','/'].includes(val)) {
+                        // handled by data-val check above, but here we process logic
+                    }
+
+                    // Operator buttons are handled by data-val too in HTML, 
+                    // but we need to check if it's an operator
+                    if (['+','-','*','/'].includes(val)) {
+                        operation = val;
+                        previousInput = currentInput;
+                        resetNext = true;
+                    }
+
+                    updateDisplay();
+                });
+            });
+        }
+
+        function initPlanLogic(node) {
+            const btnNext = node.querySelector('[data-action="next"]');
+            const btnTime = node.querySelector('[data-action="time"]');
+            const btnTarget = node.querySelector('[data-action="target"]');
+            const resDiv = node.querySelector('.plan-result');
+            
+            const getVals = () => {
+                const bal = parseFloat(node.querySelector('#p-bal').value) || 0;
+                const pay = parseFloat(node.querySelector('#p-pay').value) || 0;
+                const int = parseFloat(node.querySelector('#p-int').value) || 0;
+                const mos = parseFloat(node.querySelector('#p-mos').value) || 0;
+                return { bal, pay, int, mos };
+            };
+
+            const preventDrag = (e) => e.stopPropagation();
+            node.querySelectorAll('input').forEach(i => i.addEventListener('mousedown', preventDrag));
+            node.querySelectorAll('button').forEach(b => b.addEventListener('mousedown', preventDrag));
+
+            // 1. Next Balance (Rollover)
+            btnNext.addEventListener('click', () => {
+                const { bal, pay, int } = getVals();
+                const remainder = bal - pay;
+                if(remainder <= 0) {
+                     resDiv.innerText = "Paid Off!";
+                     return;
+                }
+                const interestAmt = remainder * (int / 100);
+                const nextBal = remainder + interestAmt;
+                resDiv.innerText = `Next Bal: ${nextBal.toFixed(2)}`;
+            });
+
+            // 2. Time to Clear?
+            btnTime.addEventListener('click', () => {
+                const { bal, pay, int } = getVals();
+                if (pay <= 0) { resDiv.innerText = "Enter Payment"; return; }
+                
+                // Simple case: No interest
+                if (int === 0) {
+                    const months = Math.ceil(bal / pay);
+                    resDiv.innerText = `Clear in ${months} mos`;
+                    return;
+                }
+
+                // Interest case
+                let b = bal;
+                let m = 0;
+                // Safety break for infinite loops
+                while (b > 0 && m < 1200) {
+                    const interest = b * (int / 100);
+                    if (pay <= interest) {
+                        resDiv.innerText = "Never (Pay < Int)";
+                        return;
+                    }
+                    b = (b - pay) + interest;
+                    m++;
+                }
+                
+                if (m >= 1200) resDiv.innerText = "> 100 yrs";
+                else resDiv.innerText = `Clear in ${m} mos`;
+            });
+
+            // 3. Required Payment for Target N
+            btnTarget.addEventListener('click', () => {
+                const { bal, int, mos } = getVals();
+                if (mos <= 0) { resDiv.innerText = "Enter Months"; return; }
+                
+                if (int === 0) {
+                    const req = bal / mos;
+                    resDiv.innerText = `Pay: ${req.toFixed(2)}/mo`;
+                    return;
+                }
+
+                // Amortization Formula
+                const r = int / 100;
+                const req = (r * bal) / (1 - Math.pow(1 + r, -mos));
+                resDiv.innerText = `Pay: ${req.toFixed(2)}/mo`;
+            });
+        }
+
+        function initComplaintLogic(node) {
+            const input = node.querySelector('.complaint-input');
+            const addBtn = node.querySelector('.add-complaint-btn');
+            const list = node.querySelector('.complaint-list');
+
+            const preventDrag = (e) => e.stopPropagation();
+            input.addEventListener('mousedown', preventDrag);
+            addBtn.addEventListener('mousedown', preventDrag);
+            
+            // Allow clicking the list (e.g. scrollbar) without dragging node, 
+            // but individual items might need click events.
+            list.addEventListener('mousedown', preventDrag); 
+
+            function addItem() {
+                const text = input.value.trim();
+                if (!text) return;
+                
+                const li = document.createElement('li');
+                li.className = 'complaint-item';
+                li.innerHTML = `
+                    <span class="complaint-text">${text}</span>
+                    <button class="del-complaint-btn"><i class="fa-solid fa-trash"></i></button>
+                `;
+                
+                // Toggle Resolved
+                li.addEventListener('click', (e) => {
+                    if (e.target.closest('.del-complaint-btn')) return;
+                    li.classList.toggle('resolved');
+                });
+                
+                // Delete
+                li.querySelector('.del-complaint-btn').addEventListener('click', () => {
+                    li.remove();
+                });
+
+                list.appendChild(li);
+                input.value = '';
+            }
+
+            addBtn.addEventListener('click', addItem);
+            input.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') addItem();
+            });
+        }
+
+        function initPostCallLogic(node) {
+            const textArea = node.querySelector('.pcw-textarea');
+            const select = node.querySelector('.pcw-select');
+            const syncBtn = node.querySelector('.pcw-sync-btn');
+            const copyBtn = node.querySelector('.pcw-copy-btn');
+            const listContainer = node.querySelector('.pcw-list-container');
+            const list = node.querySelector('.pcw-list');
+
+            const preventDrag = (e) => e.stopPropagation();
+            textArea.addEventListener('mousedown', preventDrag);
+            select.addEventListener('mousedown', preventDrag);
+            syncBtn.addEventListener('mousedown', preventDrag);
+            copyBtn.addEventListener('mousedown', preventDrag);
+            listContainer.addEventListener('mousedown', preventDrag);
+
+            syncBtn.addEventListener('click', () => {
+                list.innerHTML = '';
+                let found = false;
+
+                // 1. Sync Complaints
+                const complaintNodes = document.querySelectorAll('.node-container.complaint-node');
+                if(complaintNodes.length > 0) {
+                    const compHeader = document.createElement('li');
+                    compHeader.innerHTML = '<strong>Complaints:</strong>';
+                    compHeader.style.borderBottom = 'none';
+                    compHeader.style.marginTop = '5px';
+                    list.appendChild(compHeader);
+                    
+                    complaintNodes.forEach(cNode => {
+                        const items = cNode.querySelectorAll('.complaint-item span.complaint-text');
+                        items.forEach(span => {
+                            found = true;
+                            const li = document.createElement('li');
+                            li.textContent = span.innerText;
+                            if (span.closest('.complaint-item').classList.contains('resolved')) {
+                                li.innerHTML += ' <span style="color:#2ecc71; font-size:0.75rem;">(Resolved)</span>';
+                            }
+                            list.appendChild(li);
+                        });
+                    });
+                }
+
+                // 2. Sync Completed Shape Nodes
+                const shapeNodes = document.querySelectorAll('.node-container:not(.calculator-node):not(.plan-node):not(.complaint-node):not(.post-call-node)');
+                let shapesFound = false;
+                
+                shapeNodes.forEach(sNode => {
+                    // Check if Completed
+                    if(sNode.classList.contains('completed')) {
+                        // Get text
+                        const text = sNode.querySelector('.shape-text').value.trim();
+                        const label = sNode.querySelector('.label').value;
+                        if(text || label) {
+                            if(!shapesFound) {
+                                const shapeHeader = document.createElement('li');
+                                shapeHeader.innerHTML = '<strong>Completed Steps:</strong>';
+                                shapeHeader.style.borderBottom = 'none';
+                                shapeHeader.style.marginTop = '10px';
+                                list.appendChild(shapeHeader);
+                                shapesFound = true;
+                            }
+                            found = true;
+                            const li = document.createElement('li');
+                            li.innerHTML = `<strong>${label}</strong>: ${text || 'Done'}`;
+                            list.appendChild(li);
+                        }
+                    }
+                });
+
+                if (!found) {
+                    list.innerHTML = '<li style="color:#aaa; font-style:italic;">No data found to sync.</li>';
+                }
+            });
+
+            copyBtn.addEventListener('click', () => {
+                // Gather text
+                const items = list.querySelectorAll('li');
+                if(items.length === 0 || (items.length === 1 && items[0].style.fontStyle === 'italic')) return;
+
+                let textToCopy = '';
+                items.forEach(li => {
+                    // Simple cleanup of innerText to remove HTML tags in a basic way
+                    // innerText usually handles this well by giving just visible text
+                    textToCopy += li.innerText + '\n';
+                });
+
+                // Create temp textarea
+                const tempInput = document.createElement("textarea");
+                tempInput.value = textToCopy;
+                document.body.appendChild(tempInput);
+                tempInput.select();
+                
+                try {
+                    document.execCommand("copy");
+                    
+                    // Visual Feedback
+                    const originalIcon = copyBtn.innerHTML;
+                    copyBtn.innerHTML = '<i class="fa-solid fa-check"></i>';
+                    setTimeout(() => {
+                        copyBtn.innerHTML = originalIcon;
+                    }, 1500);
+
+                } catch (err) {
+                    console.error("Copy failed", err);
+                    alert("Failed to copy. Please manually copy the text.");
+                }
+
+                document.body.removeChild(tempInput);
+            });
+        }
+
+        // --- Menus ---
+        function buildShapeSection() {
+            const container = document.createDocumentFragment();
+            const shapeTitle = document.createElement('div');
+            shapeTitle.className = 'menu-section-title';
+            shapeTitle.innerText = 'Morph To';
+            container.appendChild(shapeTitle);
+            shapes.forEach((s, idx) => {
+                const item = document.createElement('div');
+                item.className = 'menu-item';
+                item.innerText = s.name;
+                item.onclick = (e) => {
+                    e.stopPropagation(); 
+                    if (globalState.contextMenuTarget && globalState.contextMenuType === 'node') {
+                        selectShape(globalState.contextMenuTarget, idx);
+                    }
+                    hideContextMenu();
+                };
+                container.appendChild(item);
+            });
+            return container;
+        }
+
+        function buildSubmenu(label, contentFrag) {
+            const item = document.createElement('div');
+            item.className = 'menu-item has-submenu';
+            item.innerHTML = `<span>${label}</span>`;
+            const submenu = document.createElement('div');
+            submenu.className = 'submenu';
+            submenu.appendChild(contentFrag);
+            item.appendChild(submenu);
+            return item;
+        }
+
+        function buildColorSubmenu(label, callback) {
+            const frag = document.createDocumentFragment();
+            const colorRow = document.createElement('div');
+            colorRow.className = 'color-row';
+            palettes.forEach(color => {
+                const swatch = document.createElement('div');
+                swatch.className = 'color-swatch';
+                swatch.style.backgroundColor = color;
+                swatch.onclick = (e) => {
+                    e.stopPropagation(); 
+                    callback(color);
+                    hideContextMenu();
+                };
+                colorRow.appendChild(swatch);
+            });
+            frag.appendChild(colorRow);
+            return buildSubmenu(label, frag);
+        }
+
+        function buildLineMenu(conn) {
+            contextMenu.innerHTML = '';
+            
+            // Label Input
+            const labelTitle = document.createElement('div');
+            labelTitle.className = 'menu-section-title';
+            labelTitle.innerText = 'Label';
+            contextMenu.appendChild(labelTitle);
+
+            const labelContainer = document.createElement('div');
+            labelContainer.style.padding = '5px 15px';
+            const labelInput = document.createElement('input');
+            labelInput.type = 'text';
+            labelInput.value = conn.labelText || '';
+            labelInput.style.width = '100%';
+            labelInput.style.padding = '8px';
+            labelInput.style.borderRadius = '8px';
+            labelInput.style.border = '1px solid #bdc3c7';
+            labelInput.style.outline = 'none';
+            labelInput.style.boxSizing = 'border-box';
+            labelInput.onclick = (e) => e.stopPropagation();
+            labelInput.addEventListener('input', (e) => {
+                conn.labelText = e.target.value;
+                updateConnectionLabel(conn);
+            });
+            labelContainer.appendChild(labelInput);
+            contextMenu.appendChild(labelContainer);
+
+            contextMenu.appendChild(createSeparator());
+
+            // Thickness
+            const thickTitle = document.createElement('div');
+            thickTitle.className = 'menu-section-title';
+            thickTitle.innerText = 'Thickness (px)';
+            contextMenu.appendChild(thickTitle);
+
+            const inputContainer = document.createElement('div');
+            inputContainer.style.padding = '5px 15px';
+            const numInput = document.createElement('input');
+            numInput.type = 'number';
+            numInput.min = '1';
+            numInput.max = '50';
+            numInput.value = conn.width;
+            numInput.style.width = '100%';
+            numInput.style.padding = '8px';
+            numInput.style.borderRadius = '8px';
+            numInput.style.border = '1px solid #bdc3c7';
+            numInput.style.outline = 'none';
+            numInput.style.boxSizing = 'border-box';
+            numInput.onclick = (e) => e.stopPropagation();
+            numInput.addEventListener('input', (e) => {
+                const val = parseInt(e.target.value);
+                if (val > 0) {
+                    conn.width = val;
+                    updateConnectionStyle(conn);
+                }
+            });
+            inputContainer.appendChild(numInput);
+            contextMenu.appendChild(inputContainer);
+
+            contextMenu.appendChild(createSeparator());
+
+            const styleFrag = document.createDocumentFragment();
+            [{id:'straight',l:'Straight'},{id:'metro',l:'Metro (Step)'},{id:'fork',l:'Fork (Tree)'},{id:'curved',l:'Curved'}].forEach(s => {
+                const item = document.createElement('div');
+                item.className = 'menu-item';
+                item.innerText = s.l;
+                item.onclick = (e) => { e.stopPropagation(); conn.type = s.id; updateConnectionPosition(conn); hideContextMenu(); };
+                styleFrag.appendChild(item);
+            });
+            contextMenu.appendChild(buildSubmenu('Line Style', styleFrag));
+
+            const patternFrag = document.createDocumentFragment();
+            [{id:'solid',l:'Solid'},{id:'dashed',l:'Dashed'},{id:'dotted',l:'Dotted'}].forEach(p => {
+                const item = document.createElement('div');
+                item.className = 'menu-item';
+                item.innerText = p.l;
+                item.onclick = (e) => { e.stopPropagation(); conn.pattern = p.id; updateConnectionStyle(conn); hideContextMenu(); };
+                patternFrag.appendChild(item);
+            });
+            contextMenu.appendChild(buildSubmenu('Line Pattern', patternFrag));
+
+            contextMenu.appendChild(createSeparator());
+
+            contextMenu.appendChild(buildColorSubmenu('Line Color', (color) => {
+                conn.color = color;
+                updateConnectionStyle(conn);
+            }));
+            
+            contextMenu.appendChild(createSeparator());
+            
+            const delItem = document.createElement('div');
+            delItem.className = 'menu-item';
+            delItem.innerHTML = '<span style="color: #FF6B6B">Delete Line</span>';
+            delItem.onclick = (e) => { e.stopPropagation(); deleteConnection(conn); hideContextMenu(); };
+            contextMenu.appendChild(delItem);
+        }
+
+        function createSeparator() {
+            const sep = document.createElement('div');
+            sep.className = 'separator';
+            return sep;
+        }
+
+        function buildNodeMenu(node) {
+            contextMenu.innerHTML = '';
+            const data = nodeData.get(node);
+            
+            // Only show Status and Morph for Shape nodes
+            if (data.type === 'shape') {
+                const statusItem = document.createElement('div');
+                statusItem.className = 'menu-item';
+                statusItem.innerHTML = data.isCompleted 
+                    ? '<span style="color:#e74c3c"><i class="fa-solid fa-xmark"></i> Mark Incomplete</span>'
+                    : '<span style="color:#2ecc71"><i class="fa-solid fa-check"></i> Mark Completed</span>';
+                
+                statusItem.onclick = (e) => {
+                    e.stopPropagation();
+                    data.isCompleted = !data.isCompleted;
+                    if (data.isCompleted) node.classList.add('completed');
+                    else node.classList.remove('completed');
+                    hideContextMenu();
+                };
+                contextMenu.appendChild(statusItem);
+                
+                // Add Edit Text Option
+                const editItem = document.createElement('div');
+                editItem.className = 'menu-item';
+                editItem.innerHTML = '<i class="fa-solid fa-pen"></i> Edit Text';
+                editItem.onclick = (e) => {
+                    e.stopPropagation();
+                    hideContextMenu();
+                    const textarea = node.querySelector('.shape-text');
+                    textarea.classList.add('editing');
+                    textarea.focus();
+                };
+                contextMenu.appendChild(editItem);
+
+                contextMenu.appendChild(createSeparator());
+                contextMenu.appendChild(buildShapeSection());
+                contextMenu.appendChild(createSeparator());
+            }
+
+            // Common items
+            let typeLabel = 'Node';
+            if (data.type === 'calculator') typeLabel = 'Calculator';
+            else if (data.type === 'plan') typeLabel = 'Plan Calc';
+            else if (data.type === 'complaint') typeLabel = 'Complaint Tracker';
+            else if (data.type === 'postCall') typeLabel = 'Post Call Work';
+
+            contextMenu.appendChild(buildColorSubmenu(typeLabel + ' Color', (color) => {
+                data.color = color;
+                setNodeColor(node, color);
+            }));
+
+            // Delete for all nodes
+            contextMenu.appendChild(createSeparator());
+            const delItem = document.createElement('div');
+            delItem.className = 'menu-item';
+            delItem.innerHTML = '<span style="color: #FF6B6B">Delete Node</span>';
+            delItem.onclick = (e) => { 
+                e.stopPropagation(); 
+                // Remove connections
+                for (let i = connections.length - 1; i >= 0; i--) {
+                    if (connections[i].source === node || connections[i].target === node) {
+                        deleteConnection(connections[i]);
+                    }
+                }
+                node.remove();
+                hideContextMenu(); 
+            };
+            contextMenu.appendChild(delItem);
+        }
+
+        // --- Initialization ---
+        function init() {
+            const winW = window.innerWidth;
+            const winH = window.innerHeight;
+            // Add a default shape node
+            createNode((winW - 150) / 2 - 140, (winH - 150) / 2);
+            // Add a default calculator node
+            createNode((winW - 150) / 2 + 140, (winH - 280) / 2, 0, 'calculator');
+            // Add a Plan node
+            createNode((winW - 150) / 2, (winH - 320) / 2 + 100, 0, 'plan');
+            // Add a Complaint Node
+            createNode((winW - 150) / 2 + 200, (winH - 300) / 2 + 100, 0, 'complaint');
+            updateTransform();
+        }
+        window.onload = init;
+
+        // --- Toolbar ---
+        addNodeBtn.addEventListener('click', () => {
+            const winW = window.innerWidth;
+            const winH = window.innerHeight;
+            const center = screenToWorld(winW/2, winH/2);
+            const offsetX = (Math.random() - 0.5) * 100;
+            const offsetY = (Math.random() - 0.5) * 100;
+            createNode(center.x + offsetX - 75, center.y + offsetY - 75);
+        });
+
+        clearBtn.addEventListener('click', () => {
+            if(confirm("Clear all nodes?")) {
+                nodeCanvas.innerHTML = '';
+                connectorLayer.innerHTML = '<defs id="connectorDefs"></defs>';
+                connections.length = 0; 
+            }
+        });
+
+        linkBtn.addEventListener('click', () => {
+            globalState.connectionMode = !globalState.connectionMode;
+            linkBtn.classList.toggle('active', globalState.connectionMode);
+            if (!globalState.connectionMode && globalState.connectionSource) {
+                globalState.connectionSource.classList.remove('selected-source');
+                globalState.connectionSource = null;
+            }
+        });
+
+        // --- Connections ---
+        function handleConnectionClick(node) {
+            if (!globalState.connectionSource) {
+                globalState.connectionSource = node;
+                node.classList.add('selected-source');
+            } else {
+                if (globalState.connectionSource === node) {
+                    node.classList.remove('selected-source');
+                    globalState.connectionSource = null;
+                    return;
+                }
+                const exists = connections.find(c => 
+                    (c.source === globalState.connectionSource && c.target === node) || 
+                    (c.source === node && c.target === globalState.connectionSource)
+                );
+                if (!exists) createConnection(globalState.connectionSource, node);
+                globalState.connectionSource.classList.remove('selected-source');
+                globalState.connectionSource = null;
+            }
+        }
+
+        function createConnection(nodeA, nodeB) {
+            const id = 'conn-' + Math.random().toString(36).substr(2, 9);
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('id', id);
+            path.classList.add('connector');
+            
+            const defaultColor = '#bdc3c7';
+            const defaultWidth = 2; 
+
+            const haloElement = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            haloElement.classList.add('label-base', 'connector-label-halo');
+            const haloPath = document.createElementNS('http://www.w3.org/2000/svg', 'textPath');
+            haloPath.setAttribute('href', '#' + id);
+            haloPath.setAttribute('startOffset', '50%');
+            haloElement.appendChild(haloPath);
+
+            const textElement = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            textElement.classList.add('label-base', 'connector-label-text');
+            const textPath = document.createElementNS('http://www.w3.org/2000/svg', 'textPath');
+            textPath.setAttribute('href', '#' + id);
+            textPath.setAttribute('startOffset', '50%');
+            textElement.appendChild(textPath);
+            
+            connectorLayer.appendChild(path);
+            connectorLayer.appendChild(haloElement);
+            connectorLayer.appendChild(textElement); 
+
+            const conn = { 
+                source: nodeA, target: nodeB, element: path, 
+                haloElement: haloElement, labelElement: textElement,
+                labelText: '', color: defaultColor, width: defaultWidth, type: 'straight', pattern: 'solid' 
+            };
+            updateConnectionStyle(conn);
+            updateConnectionPosition(conn);
+            connections.push(conn);
+            connectionData.set(path, conn); 
+        }
+
+        function updateConnectionLabel(conn) {
+            conn.haloElement.querySelector('textPath').textContent = conn.labelText;
+            conn.labelElement.querySelector('textPath').textContent = conn.labelText;
+        }
+
+        function deleteConnection(conn) {
+            const index = connections.indexOf(conn);
+            if (index > -1) connections.splice(index, 1);
+            conn.element.remove();
+            if(conn.haloElement) conn.haloElement.remove();
+            if(conn.labelElement) conn.labelElement.remove();
+        }
+
+        function updateConnectionStyle(conn) {
+            conn.element.setAttribute('stroke', conn.color);
+            conn.element.setAttribute('stroke-width', conn.width);
+            let dashArray = 'none';
+            if (conn.pattern === 'dashed') dashArray = `${conn.width * 3}, ${conn.width * 2}`;
+            else if (conn.pattern === 'dotted') {
+                dashArray = `${conn.width}, ${conn.width * 2}`;
+                conn.element.setAttribute('stroke-linecap', 'round');
+            }
+            conn.element.setAttribute('stroke-dasharray', dashArray);
+        }
+
+        function updateConnectionPosition(conn) {
+            const dataA = nodeData.get(conn.source);
+            const dataB = nodeData.get(conn.target);
+            // Center of the node for lines
+            const offsetAx = conn.source.offsetWidth / 2;
+            const offsetAy = conn.source.offsetHeight / 2;
+            const offsetBx = conn.target.offsetWidth / 2;
+            const offsetBy = conn.target.offsetHeight / 2;
+            
+            let x1 = dataA.x + offsetAx;
+            let y1 = dataA.y + offsetAy;
+            let x2 = dataB.x + offsetBx;
+            let y2 = dataB.y + offsetBy;
+
+            let d = '';
+
+            if (conn.type === 'metro') {
+                const midX = (x1 + x2) / 2;
+                d = `M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}`;
+            } else if (conn.type === 'fork') {
+                const midY = y1 + 80; 
+                d = `M ${x1} ${y1} L ${x1} ${midY} L ${x2} ${midY} L ${x2} ${y2}`;
+            } else {
+                let sx = x1, sy = y1, tx = x2, ty = y2;
+                if (x1 > x2) {
+                    [sx, tx, sy, ty] = [x2, x1, y2, y1];
+                }
+
+                if (conn.type === 'curved') {
+                    const cx1 = (sx + tx) / 2;
+                    const cy1 = sy;
+                    const cx2 = (sx + tx) / 2;
+                    const cy2 = ty;
+                    d = `M ${sx} ${sy} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${tx} ${ty}`;
+                } else {
+                    d = `M ${sx} ${sy} L ${tx} ${ty}`;
+                }
+            }
+            conn.element.setAttribute('d', d);
+        }
+
+        // --- Interaction Logic (Drag / Pan) ---
+        function onDragStart(e) {
+            if (e.button === 2) return; 
+
+            // Prevent drag if clicking a no-drag element (like calculator buttons)
+            if (e.target.closest('.no-drag')) return;
+
+            if (e.target.closest('#contextMenu')) return;
+            
+            const node = e.target.closest('.node-container');
+            const isConnector = e.target.classList.contains('connector');
+            const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+            const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+
+            hideContextMenu();
+
+            // Case 1: Dragging a Node
+            if (node) {
+                const data = nodeData.get(node);
+                globalState.draggingNode = node;
+                globalState.dragDistance = 0;
+                globalState.startX = clientX;
+                globalState.startY = clientY;
+                globalState.initialNodeX = data.x;
+                globalState.initialNodeY = data.y;
+                if(node.querySelector('.neumorphic-shape')) {
+                    node.querySelector('.neumorphic-shape').classList.add('pressing');
+                } else {
+                    node.style.boxShadow = 'inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light)';
+                }
+                return;
+            }
+
+            // Case 2: Panning (Clicked on background)
+            if (!node && !isConnector) {
+                globalState.isPanning = true;
+                globalState.dragDistance = 0;
+                globalState.startX = clientX;
+                globalState.startY = clientY;
+                globalState.panStartX = globalState.viewX;
+                globalState.panStartY = globalState.viewY;
+                document.body.classList.add('panning');
+            }
+        }
+
+        function onDragMove(e) {
+            const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+            const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+
+            if (globalState.isPanning) {
+                e.preventDefault();
+                const dx = clientX - globalState.startX;
+                const dy = clientY - globalState.startY;
+                globalState.dragDistance += Math.abs(dx) + Math.abs(dy);
+
+                globalState.viewX = globalState.panStartX + dx;
+                globalState.viewY = globalState.panStartY + dy;
+                updateTransform();
+                return;
+            }
+
+            if (globalState.draggingNode) {
+                e.preventDefault();
+                const dx = (clientX - globalState.startX) / globalState.zoom; 
+                const dy = (clientY - globalState.startY) / globalState.zoom;
+
+                globalState.dragDistance += Math.sqrt(dx*dx + dy*dy);
+                
+                const data = nodeData.get(globalState.draggingNode);
+                data.x = globalState.initialNodeX + dx;
+                data.y = globalState.initialNodeY + dy;
+
+                globalState.draggingNode.style.transform = `translate3d(${data.x}px, ${data.y}px, 0)`;
+
+                connections.forEach(conn => {
+                    if (conn.source === globalState.draggingNode || conn.target === globalState.draggingNode) {
+                        updateConnectionPosition(conn);
+                    }
+                });
+            }
+        }
+
+        function onDragEnd(e) {
+            if (globalState.isPanning) {
+                globalState.isPanning = false;
+                document.body.classList.remove('panning');
+                return;
+            }
+
+            if (globalState.draggingNode) {
+                const node = globalState.draggingNode;
+                const shape = node.querySelector('.neumorphic-shape');
+                if(shape) shape.classList.remove('pressing');
+                else node.style.boxShadow = ''; // Reset calculator shadow
+                
+                if (globalState.dragDistance < 5) {
+                    if (globalState.connectionMode) handleConnectionClick(node);
+                    else {
+                        // Only morph shape nodes
+                        const data = nodeData.get(node);
+                        if (data.type === 'shape') triggerMorph(node);
+                    }
+                }
+                globalState.draggingNode = null;
+            }
+        }
+
+        window.addEventListener('mousedown', onDragStart);
+        window.addEventListener('mousemove', onDragMove);
+        window.addEventListener('mouseup', onDragEnd);
+        window.addEventListener('touchstart', onDragStart, {passive: false});
+        window.addEventListener('touchmove', onDragMove, {passive: false});
+        window.addEventListener('touchend', onDragEnd);
+
+        // --- Context Menu ---
+        window.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            const node = e.target.closest('.node-container');
+            const isConnector = e.target.classList.contains('connector');
+
+            if (!node && !isConnector) {
+                hideContextMenu();
+                return;
+            }
+
+            const menuWidth = 180;
+            const menuHeight = 350; 
+            let x = e.clientX;
+            let y = e.clientY;
+            
+            if (x + menuWidth > window.innerWidth) x -= menuWidth;
+            if (y + menuHeight > window.innerHeight) y -= menuHeight;
+
+            contextMenu.style.left = `${x}px`;
+            contextMenu.style.top = `${y}px`;
+
+            if (node) {
+                globalState.contextMenuTarget = node;
+                globalState.contextMenuType = 'node';
+                buildNodeMenu(node);
+            } else if (isConnector) {
+                const conn = connectionData.get(e.target);
+                if (!conn) return;
+                globalState.contextMenuTarget = conn;
+                globalState.contextMenuType = 'line';
+                buildLineMenu(conn);
+            }
+            contextMenu.classList.add('visible');
+        });
+
+        window.addEventListener('click', (e) => {
+            if (e.target.closest('#contextMenu')) return;
+            hideContextMenu();
+        });
+
+        function hideContextMenu() {
+            contextMenu.classList.remove('visible');
+            globalState.contextMenuTarget = null;
+            globalState.contextMenuType = null;
+        }
+
+        // --- Animation ---
+        function triggerMorph(node) {
+            const data = nodeData.get(node);
+            if(data.type !== 'shape') return;
+            const nextIndex = (data.shapeIndex + 1) % shapes.length;
+            selectShape(node, nextIndex);
+        }
+
+        function selectShape(node, index) {
+            const data = nodeData.get(node);
+            data.shapeIndex = index;
+            const nextShape = shapes[index];
+            const label = node.querySelector('.label');
+            
+            // Check if label matches any default name in the shapes list
+            // If it does, we assume it's safe to auto-update.
+            // If the user typed something custom (e.g. "Step 1"), we don't overwrite it.
+            const currentVal = label.value;
+            const isDefaultName = shapes.some(s => s.name === currentVal);
+
+            if (isDefaultName) {
+                 label.style.opacity = 0;
+                 setTimeout(() => { label.value = nextShape.name; label.style.opacity = 1; }, 150);
+            }
+            
+            animateMorph(node, data, nextShape.coords);
+        }
+
+        function easeOutElastic(x) {
+            const c4 = (2 * Math.PI) / 3;
+            if (x === 0) return 0;
+            if (x === 1) return 1;
+            return Math.pow(2, -10 * x) * Math.sin((x * 10 - 0.75) * c4) + 1;
+        }
+
+        function animateMorph(node, data, targetConfig) {
+            const poly = node.querySelector('polygon');
+            const startCoords = JSON.parse(JSON.stringify(data.currentPoints));
+            const startTime = performance.now();
+            const duration = 800; 
+
+            function update(currentTime) {
+                const elapsed = currentTime - startTime;
+                let progress = Math.min(elapsed / duration, 1);
+                const ease = easeOutElastic(progress);
+                for (let i = 0; i < POINT_COUNT; i++) {
+                    data.currentPoints[i].x = startCoords[i].x + (targetConfig[i].x - startCoords[i].x) * ease;
+                    data.currentPoints[i].y = startCoords[i].y + (targetConfig[i].y - startCoords[i].y) * ease;
+                }
+                const pointsStr = data.currentPoints.map(p => `${p.x},${p.y}`).join(' ');
+                poly.setAttribute('points', pointsStr);
+                if (progress < 1) data.animationFrame = requestAnimationFrame(update);
+            }
+            cancelAnimationFrame(data.animationFrame);
+            data.animationFrame = requestAnimationFrame(update);
+        }
+    </script>
+
+</body>
+</html>
+
+
+
