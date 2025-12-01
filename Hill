@@ -1,0 +1,1455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Draggable Morphing Nodes</title>
+    <!-- Add FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --bg-color: #e0e5ec;
+            --bar-bg: #f0f3f7;
+            --shadow-light: #ffffff;
+            --shadow-dark: #a3b1c6;
+            --text-color: #7b8fa3;
+            --accent-color: #2c3e50;
+            --highlight-color: #3498db;
+            /* Node size */
+            --size: min(150px, 40vw);
+            --stroke-width: 20px;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            margin: 0;
+            height: 100vh;
+            overflow: hidden;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            /* Cursor indicates panning is available on background */
+            cursor: grab;
+        }
+        
+        body.panning {
+            cursor: grabbing;
+        }
+
+        /* --- Sidebar & Overlay --- */
+        #sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 260px;
+            height: 100%;
+            background-color: var(--bg-color);
+            box-shadow: 2px 0 15px rgba(163, 177, 198, 0.3);
+            z-index: 1000;
+            transform: translateX(-100%);
+            transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+            padding: 25px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            overflow-y: auto;
+        }
+
+        #sidebar.open {
+            transform: translateX(0);
+        }
+
+        .sidebar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            color: var(--accent-color);
+            font-size: 1.4rem;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+        }
+
+        .close-sidebar-btn {
+            background: none;
+            border: none;
+            color: var(--text-color);
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: color 0.2s;
+        }
+        
+        .close-sidebar-btn:hover {
+            color: var(--accent-color);
+        }
+
+        .sidebar-section {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .sidebar-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: #95a5a6;
+            font-weight: 700;
+            letter-spacing: 1px;
+            margin-left: 5px;
+        }
+
+        /* FLAT Sidebar Button Style */
+        .sidebar-btn {
+            padding: 12px 16px;
+            background-color: transparent;
+            border: 1px solid transparent; 
+            border-radius: 8px;
+            color: var(--text-color);
+            font-weight: 600;
+            cursor: pointer;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: none; /* Flat style */
+            transition: all 0.2s ease;
+            font-size: 0.95rem;
+        }
+
+        .sidebar-btn:hover {
+            color: var(--accent-color);
+            background-color: rgba(0,0,0,0.05); /* Simple highlight */
+            transform: translateX(4px); /* Subtle shift right */
+        }
+
+        .sidebar-btn:active {
+            background-color: rgba(0,0,0,0.1);
+            transform: translateX(4px) scale(0.98);
+        }
+
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(44, 62, 80, 0.2);
+            backdrop-filter: blur(2px);
+            z-index: 900;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+
+        .overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        /* --- Top Menu Bar --- */
+        #topBar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 60px;
+            background-color: var(--bar-bg);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-sizing: border-box;
+            z-index: 500;
+            border-bottom: 3px solid #d1d9e6; /* Flat border */
+            cursor: default; /* Reset cursor on bar */
+        }
+
+        .bar-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .app-title {
+            font-weight: 800;
+            font-size: 1.2rem;
+            color: var(--accent-color);
+            letter-spacing: -0.5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .bar-actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        
+        .zoom-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-right: 15px;
+            background: rgba(0,0,0,0.03);
+            padding: 4px 12px;
+            border-radius: 12px;
+        }
+        
+        .zoom-display {
+            font-weight: 600;
+            color: var(--text-color);
+            min-width: 45px;
+            text-align: center;
+            font-size: 0.85rem;
+        }
+
+        .bar-btn {
+            background: none;
+            border: none;
+            font-size: 1.25rem; /* Made icons smaller/thinner */
+            color: var(--text-color);
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 10px;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px; /* Reduced container size */
+            height: 40px;
+        }
+        
+        .mini-btn {
+            font-size: 1rem;
+            width: 30px;
+            height: 30px;
+            padding: 4px;
+        }
+
+        .bar-btn:hover {
+            color: var(--accent-color);
+            background-color: rgba(0,0,0,0.05);
+            transform: scale(1.05);
+        }
+
+        .bar-btn:active {
+            transform: scale(0.95);
+        }
+
+        .bar-btn.active {
+            color: var(--highlight-color);
+            background-color: rgba(52, 152, 219, 0.1);
+            box-shadow: inset 2px 2px 5px rgba(0,0,0,0.1);
+        }
+
+        /* --- Layers --- */
+        
+        /* THE WORLD: Container for Zoom/Pan */
+        #world {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transform-origin: 0 0;
+            will-change: transform;
+            pointer-events: none; /* Allow events to pass through wrapper */
+        }
+
+        /* Connector Layer (SVG) */
+        #connectorLayer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 5; /* Behind nodes */
+            pointer-events: none; 
+            overflow: visible;
+        }
+
+        .connector {
+            stroke-linecap: round;
+            fill: none; /* Important for paths */
+            opacity: 0.8;
+            transition: stroke 0.2s, stroke-width 0.2s;
+            pointer-events: stroke; /* Lines capture clicks */
+            cursor: pointer;
+        }
+        
+        .connector:hover {
+            opacity: 1;
+            filter: drop-shadow(0 0 2px rgba(0,0,0,0.2));
+        }
+
+        /* Shared Text Styles */
+        .label-base {
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 14px;
+            font-weight: 700;
+            pointer-events: none;
+            text-anchor: middle;
+            dominant-baseline: middle;
+            user-select: none;
+        }
+
+        /* The Halo: Thick background-colored stroke/fill to hide the line */
+        .connector-label-halo {
+            stroke: var(--bg-color); 
+            stroke-width: 14px; /* Slightly thicker for a cleaner gap */
+            stroke-linejoin: round; /* ROUNDS the corners of the halo to prevent spikes */
+            stroke-linecap: round;
+            fill: var(--bg-color); /* Fill effectively erases the line */
+        }
+
+        /* The Text: Clean color sitting on top */
+        .connector-label-text {
+            fill: var(--accent-color);
+        }
+
+        /* Container for all nodes */
+        #nodeCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none; 
+        }
+
+        /* Individual Node Container */
+        .node-container {
+            position: absolute;
+            width: var(--size);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: grab;
+            touch-action: none; 
+            will-change: transform; 
+            z-index: 10;
+            pointer-events: auto; /* Re-enable pointer events for nodes */
+        }
+
+        .node-container:active {
+            cursor: grabbing;
+            z-index: 20; /* Bring to front when dragging */
+        }
+
+        .neumorphic-shape {
+            width: var(--size);
+            height: var(--size);
+            position: relative;
+            filter: 
+                drop-shadow(-4.5px -4.5px 8px var(--shadow-light)) 
+                drop-shadow(4.5px 4.5px 8px var(--shadow-dark));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            border-radius: 50%; /* Just for the selection ring shape if needed */
+        }
+
+        .neumorphic-shape.pressing {
+            transform: scale(0.96);
+        }
+
+        /* Status Badge (Checkmark) */
+        .status-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            width: 32px;
+            height: 32px;
+            background: #2ecc71; /* Green */
+            border-radius: 50%;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            opacity: 0;
+            transform: scale(0.5);
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 3px 3px 6px rgba(0,0,0,0.15);
+            z-index: 15;
+            pointer-events: none;
+        }
+
+        .node-container.completed .status-badge {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        /* Selection Ring for Connection Mode */
+        .node-container.selected-source .neumorphic-shape {
+            box-shadow: 0 0 0 4px var(--highlight-color); 
+        }
+
+        svg {
+            width: 100%;
+            height: 100%;
+            overflow: visible; 
+            pointer-events: none;
+        }
+
+        polygon {
+            /* Default colors, overridden by JS style */
+            fill: var(--bg-color);
+            stroke: var(--bg-color);
+            stroke-width: var(--stroke-width);
+            stroke-linejoin: round;
+            transition: fill 0.3s ease, stroke 0.3s ease;
+        }
+
+        .label {
+            margin-top: 50px;
+            color: var(--text-color);
+            font-size: 1.2rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            font-weight: 600;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            text-align: center;
+        }
+
+        /* --- Context Menu Styles --- */
+        #contextMenu {
+            position: absolute;
+            display: none;
+            background-color: var(--bg-color);
+            padding: 15px;
+            border-radius: 20px;
+            /* Flat Look: No shadow, solid border */
+            border: 2px solid #bdc3c7;
+            z-index: 2000; /* Highest */
+            min-width: 180px;
+            flex-direction: column;
+            gap: 5px; 
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            transform-origin: top left; /* Pivot point for bounce */
+            pointer-events: auto;
+            cursor: default;
+        }
+
+        #contextMenu.visible {
+            display: flex;
+            animation: bounceIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes bounceIn {
+            0% { opacity: 0; transform: scale(0.5); }
+            60% { opacity: 1; transform: scale(1.05); }
+            80% { transform: scale(0.95); }
+            100% { transform: scale(1); }
+        }
+
+        .menu-section-title {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: #95a5a6;
+            margin: 5px 10px;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        .menu-item {
+            padding: 10px 15px;
+            color: var(--text-color);
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 8px;
+            text-align: left;
+            transition: all 0.2s ease;
+            background-color: transparent;
+            position: relative; /* For submenu positioning */
+        }
+
+        .menu-item:hover {
+            color: #55677d;
+            background-color: rgba(255,255,255,0.5);
+        }
+
+        /* Submenu Styling */
+        .has-submenu {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .has-submenu::after {
+            content: '\f0da'; /* FontAwesome chevron right */
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+            margin-left: 10px;
+            font-size: 0.8rem;
+        }
+
+        .submenu {
+            position: absolute;
+            left: 100%;
+            top: -5px;
+            background-color: var(--bg-color);
+            border: 2px solid #bdc3c7;
+            border-radius: 15px;
+            padding: 15px;
+            display: none;
+            min-width: 160px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            margin-left: 10px;
+            z-index: 700;
+        }
+        
+        /* INVISIBLE BRIDGE to keep hover active across gap */
+        .submenu::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -15px; 
+            width: 15px;
+            height: 100%;
+            background: transparent;
+        }
+
+        .menu-item:hover .submenu {
+            display: block;
+            animation: fadeIn 0.2s ease;
+        }
+        
+        .separator {
+            height: 1px;
+            background-color: #d1d9e6;
+            margin: 5px 0;
+            width: 100%;
+        }
+
+        /* Color Picker Styles */
+        .color-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .color-swatch {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid rgba(255,255,255,0.5);
+            box-shadow: 2px 2px 5px rgba(163, 177, 198, 0.4);
+            transition: transform 0.2s ease, border-color 0.2s;
+        }
+
+        .color-swatch:hover {
+            transform: scale(1.15);
+            border-color: #fff;
+        }
+        
+        /* Input Styling */
+        input[type="number"], input[type="text"] {
+            font-family: inherit;
+            color: var(--text-color);
+            background: rgba(255,255,255,0.5);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+
+    <nav id="topBar">
+        <div class="bar-left">
+            <button class="bar-btn" id="menuBtn" title="Menu">
+                <i class="fa-solid fa-bars"></i>
+            </button>
+            <div class="app-title">MORPH</div>
+        </div>
+        <div class="bar-actions">
+            <!-- Zoom Controls -->
+            <div class="zoom-controls">
+                <button class="bar-btn mini-btn" id="zoomOutBtn" title="Zoom Out"><i class="fa-solid fa-minus"></i></button>
+                <div class="zoom-display" id="zoomDisplay">100%</div>
+                <button class="bar-btn mini-btn" id="zoomInBtn" title="Zoom In"><i class="fa-solid fa-plus"></i></button>
+            </div>
+
+            <button class="bar-btn" id="linkBtn" title="Connect Nodes">
+                <i class="fa-solid fa-link"></i>
+            </button>
+            <button class="bar-btn" id="clearBtn" title="Clear All">
+                <i class="fa-regular fa-trash-can"></i>
+            </button>
+            <button class="bar-btn" id="addNodeBtn" title="Add Node">
+                <i class="fa-regular fa-square-plus"></i>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Sidebar -->
+    <div class="overlay" id="overlay"></div>
+    <aside id="sidebar">
+        <div class="sidebar-header">
+            <span>Tools</span>
+            <button class="close-sidebar-btn" id="closeSidebarBtn"><i class="fa-solid fa-times"></i></button>
+        </div>
+        
+        <div class="sidebar-section">
+            <div class="sidebar-label">Actions</div>
+            <button class="sidebar-btn" id="sideAddBtn">
+                <i class="fa-regular fa-square-plus"></i> Add Node
+            </button>
+            <button class="sidebar-btn" id="sideClearBtn">
+                <i class="fa-regular fa-trash-can"></i> Clear Canvas
+            </button>
+        </div>
+
+        <div class="separator"></div>
+
+        <div class="sidebar-section" id="shapeList">
+            <div class="sidebar-label">Create Shape</div>
+            <!-- Shapes injected here -->
+        </div>
+    </aside>
+
+    <!-- Wrap canvas layers in a world container for Pan/Zoom -->
+    <div id="world">
+        <svg id="connectorLayer">
+            <!-- Defs for future use -->
+            <defs id="connectorDefs"></defs>
+        </svg>
+        <div id="nodeCanvas">
+            <!-- Nodes will be injected here via JS -->
+        </div>
+    </div>
+
+    <!-- Right Click Menu -->
+    <div id="contextMenu"></div>
+
+    <script>
+        const nodeCanvas = document.getElementById('nodeCanvas');
+        const connectorLayer = document.getElementById('connectorLayer');
+        const contextMenu = document.getElementById('contextMenu');
+        const addNodeBtn = document.getElementById('addNodeBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const linkBtn = document.getElementById('linkBtn');
+        const world = document.getElementById('world');
+        const zoomDisplay = document.getElementById('zoomDisplay');
+        const zoomInBtn = document.getElementById('zoomInBtn');
+        const zoomOutBtn = document.getElementById('zoomOutBtn');
+        
+        // Sidebar Elements
+        const menuBtn = document.getElementById('menuBtn');
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('overlay');
+        const closeSidebarBtn = document.getElementById('closeSidebarBtn');
+        const sideAddBtn = document.getElementById('sideAddBtn');
+        const sideClearBtn = document.getElementById('sideClearBtn');
+        const shapeList = document.getElementById('shapeList');
+
+        const POINT_COUNT = 64; 
+
+        // State Management
+        const nodeData = new WeakMap();
+        const connectionData = new WeakMap(); 
+        const connections = []; 
+
+        const globalState = {
+            draggingNode: null,
+            startX: 0,
+            startY: 0,
+            initialNodeX: 0,
+            initialNodeY: 0,
+            dragDistance: 0,
+            contextMenuTarget: null,
+            contextMenuType: null,
+            connectionMode: false,
+            connectionSource: null,
+            
+            // Viewport State
+            viewX: 0,
+            viewY: 0,
+            zoom: 1,
+            isPanning: false,
+            panStartX: 0,
+            panStartY: 0
+        };
+
+        const palettes = [
+            '#e0e5ec', '#FF6B6B', '#4ECDC4', '#FFE66D', 
+            '#9B59B6', '#34495e', '#E17055', '#00b894', '#2d3436'
+        ];
+
+        // --- Helper: Coordinate Conversion ---
+        function screenToWorld(sx, sy) {
+            return {
+                x: (sx - globalState.viewX) / globalState.zoom,
+                y: (sy - globalState.viewY) / globalState.zoom
+            };
+        }
+
+        // --- Viewport Logic (Pan & Zoom) ---
+        function updateTransform() {
+            world.style.transform = `translate(${globalState.viewX}px, ${globalState.viewY}px) scale(${globalState.zoom})`;
+            zoomDisplay.innerText = Math.round(globalState.zoom * 100) + '%';
+        }
+
+        function setZoom(newZoom, centerX, centerY) {
+            const minZoom = 0.1;
+            const maxZoom = 5;
+            newZoom = Math.min(Math.max(newZoom, minZoom), maxZoom);
+
+            if (centerX === undefined) {
+                centerX = window.innerWidth / 2;
+                centerY = window.innerHeight / 2;
+            }
+
+            const wx = (centerX - globalState.viewX) / globalState.zoom;
+            const wy = (centerY - globalState.viewY) / globalState.zoom;
+
+            globalState.zoom = newZoom;
+
+            globalState.viewX = centerX - wx * globalState.zoom;
+            globalState.viewY = centerY - wy * globalState.zoom;
+
+            updateTransform();
+        }
+
+        window.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomSensitivity = 0.001;
+            const newZoom = globalState.zoom - e.deltaY * zoomSensitivity * globalState.zoom;
+            setZoom(newZoom, e.clientX, e.clientY);
+        }, { passive: false });
+
+        zoomInBtn.addEventListener('click', () => setZoom(globalState.zoom * 1.2));
+        zoomOutBtn.addEventListener('click', () => setZoom(globalState.zoom / 1.2));
+
+        // --- Sidebar Logic ---
+        function toggleSidebar() {
+            sidebar.classList.toggle('open');
+            overlay.classList.toggle('active');
+        }
+
+        menuBtn.addEventListener('click', toggleSidebar);
+        closeSidebarBtn.addEventListener('click', toggleSidebar);
+        overlay.addEventListener('click', toggleSidebar);
+
+        sideAddBtn.addEventListener('click', () => {
+            // Add default node
+            const winW = window.innerWidth;
+            const winH = window.innerHeight;
+            const center = screenToWorld(winW/2, winH/2);
+            createNode(center.x - 75, center.y - 75);
+            toggleSidebar(); // optional close on action
+        });
+
+        sideClearBtn.addEventListener('click', () => {
+            if(confirm("Clear all nodes?")) {
+                nodeCanvas.innerHTML = '';
+                connectorLayer.innerHTML = '<defs id="connectorDefs"></defs>';
+                connections.length = 0; 
+            }
+            toggleSidebar();
+        });
+
+        // --- Shapes ---
+        function distributePoints(vertices) {
+            const points = [];
+            const pointsPerVertex = Math.floor(POINT_COUNT / vertices.length);
+            const remainder = POINT_COUNT % vertices.length;
+            vertices.forEach((v, index) => {
+                const count = pointsPerVertex + (index < remainder ? 1 : 0);
+                for (let i = 0; i < count; i++) points.push({...v});
+            });
+            return points;
+        }
+
+        function getCirclePoints(cx, cy, r) {
+            const points = [];
+            for (let i = 0; i < POINT_COUNT; i++) {
+                const angle = -Math.PI / 2 + (i * (Math.PI * 2) / POINT_COUNT);
+                points.push({
+                    x: cx + r * Math.cos(angle),
+                    y: cy + r * Math.sin(angle)
+                });
+            }
+            return points;
+        }
+
+        function getPillPoints(x, y, width, height) {
+            const points = [];
+            const r = width / 2;
+            const straightH = height - width;
+            const cyTop = y - straightH / 2;
+            const cyBottom = y + straightH / 2;
+            for(let i=0; i<12; i++) points.push({ x: x + r, y: cyTop + (i/12)*straightH });
+            for(let i=0; i<20; i++) {
+                const ang = (i/20) * Math.PI;
+                points.push({ x: x + r*Math.cos(ang), y: cyBottom + r*Math.sin(ang) });
+            }
+            for(let i=0; i<12; i++) points.push({ x: x - r, y: cyBottom - (i/12)*straightH });
+            for(let i=0; i<20; i++) {
+                const ang = Math.PI + (i/20) * Math.PI;
+                points.push({ x: x + r*Math.cos(ang), y: cyTop + r*Math.sin(ang) });
+            }
+            return points;
+        }
+
+        const shapes = [
+            { name: "Triangle", icon: "fa-play", coords: distributePoints([{x: 100, y: 30}, {x: 170, y: 160}, {x: 30, y: 160}]) },
+            { name: "Trapezoid", icon: "fa-vector-square", coords: distributePoints([{x: 140, y: 60}, {x: 170, y: 140}, {x: 30, y: 140}, {x: 60, y: 60}]) },
+            { name: "Diamond", icon: "fa-gem", coords: distributePoints([{x: 100, y: 20}, {x: 180, y: 100}, {x: 100, y: 180}, {x: 20, y: 100}]) },
+            { name: "Circle", icon: "fa-circle", coords: getCirclePoints(100, 100, 70) },
+            { name: "Square", icon: "fa-square", coords: distributePoints([{x: 160, y: 40}, {x: 160, y: 160}, {x: 40, y: 160}, {x: 40, y: 40}]) },
+            { name: "Squircle", icon: "fa-square-full", coords: distributePoints([{x: 160, y: 40}, {x: 168, y: 100}, {x: 160, y: 160}, {x: 100, y: 168}, {x: 40, y: 160}, {x: 32, y: 100}, {x: 40, y: 40}, {x: 100, y: 32}]) },
+            { name: "Rectangle", icon: "fa-stop", coords: distributePoints([{x: 170, y: 60}, {x: 170, y: 140}, {x: 30, y: 140}, {x: 30, y: 60}]) },
+            { name: "Capsule", icon: "fa-capsules", coords: getPillPoints(100, 100, 80, 160) }
+        ];
+
+        // Fill Sidebar Shape List
+        shapes.forEach((s, idx) => {
+            const btn = document.createElement('button');
+            btn.className = 'sidebar-btn';
+            btn.innerHTML = `<i class="fa-solid ${s.icon || 'fa-shapes'}"></i> ${s.name}`;
+            btn.onclick = () => {
+                const winW = window.innerWidth;
+                const winH = window.innerHeight;
+                const center = screenToWorld(winW/2, winH/2);
+                createNode(center.x - 75, center.y - 75, idx);
+                toggleSidebar();
+            };
+            shapeList.appendChild(btn);
+        });
+
+        // --- Node Factory ---
+        function createNode(x, y, shapeIdx = 0) {
+            const node = document.createElement('div');
+            node.className = 'node-container';
+            node.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+
+            node.innerHTML = `
+                <div class="neumorphic-shape">
+                    <svg viewBox="0 0 200 200">
+                        <polygon points="" />
+                    </svg>
+                    <div class="status-badge"><i class="fa-solid fa-check"></i></div>
+                </div>
+                <div class="label">Triangle</div>
+            `;
+
+            nodeCanvas.appendChild(node);
+
+            const initialState = {
+                x: x,
+                y: y,
+                shapeIndex: shapeIdx, // Use passed shape index
+                color: palettes[0],
+                isCompleted: false, 
+                currentPoints: JSON.parse(JSON.stringify(shapes[shapeIdx].coords)), // Use passed shape coords
+                animationFrame: null
+            };
+            
+            nodeData.set(node, initialState);
+
+            const poly = node.querySelector('polygon');
+            const pointsStr = initialState.currentPoints.map(p => `${p.x},${p.y}`).join(' ');
+            poly.setAttribute('points', pointsStr);
+            
+            // Set initial label
+            const label = node.querySelector('.label');
+            label.innerText = shapes[shapeIdx].name;
+
+            setNodeColor(node, initialState.color);
+
+            return node;
+        }
+
+        function setNodeColor(node, color) {
+            const poly = node.querySelector('polygon');
+            poly.style.fill = color;
+            poly.style.stroke = color;
+        }
+
+        // --- Menus ---
+        function buildShapeSection() {
+            const container = document.createDocumentFragment();
+            const shapeTitle = document.createElement('div');
+            shapeTitle.className = 'menu-section-title';
+            shapeTitle.innerText = 'Morph To';
+            container.appendChild(shapeTitle);
+            shapes.forEach((s, idx) => {
+                const item = document.createElement('div');
+                item.className = 'menu-item';
+                item.innerText = s.name;
+                item.onclick = (e) => {
+                    e.stopPropagation(); 
+                    if (globalState.contextMenuTarget && globalState.contextMenuType === 'node') {
+                        selectShape(globalState.contextMenuTarget, idx);
+                    }
+                    hideContextMenu();
+                };
+                container.appendChild(item);
+            });
+            return container;
+        }
+
+        function buildSubmenu(label, contentFrag) {
+            const item = document.createElement('div');
+            item.className = 'menu-item has-submenu';
+            item.innerHTML = `<span>${label}</span>`;
+            const submenu = document.createElement('div');
+            submenu.className = 'submenu';
+            submenu.appendChild(contentFrag);
+            item.appendChild(submenu);
+            return item;
+        }
+
+        function buildColorSubmenu(label, callback) {
+            const frag = document.createDocumentFragment();
+            const colorRow = document.createElement('div');
+            colorRow.className = 'color-row';
+            palettes.forEach(color => {
+                const swatch = document.createElement('div');
+                swatch.className = 'color-swatch';
+                swatch.style.backgroundColor = color;
+                swatch.onclick = (e) => {
+                    e.stopPropagation(); 
+                    callback(color);
+                    hideContextMenu();
+                };
+                colorRow.appendChild(swatch);
+            });
+            frag.appendChild(colorRow);
+            return buildSubmenu(label, frag);
+        }
+
+        function buildLineMenu(conn) {
+            contextMenu.innerHTML = '';
+            
+            // Label Input
+            const labelTitle = document.createElement('div');
+            labelTitle.className = 'menu-section-title';
+            labelTitle.innerText = 'Label';
+            contextMenu.appendChild(labelTitle);
+
+            const labelContainer = document.createElement('div');
+            labelContainer.style.padding = '5px 15px';
+            const labelInput = document.createElement('input');
+            labelInput.type = 'text';
+            labelInput.value = conn.labelText || '';
+            labelInput.style.width = '100%';
+            labelInput.style.padding = '8px';
+            labelInput.style.borderRadius = '8px';
+            labelInput.style.border = '1px solid #bdc3c7';
+            labelInput.style.outline = 'none';
+            labelInput.style.boxSizing = 'border-box';
+            labelInput.onclick = (e) => e.stopPropagation();
+            labelInput.addEventListener('input', (e) => {
+                conn.labelText = e.target.value;
+                updateConnectionLabel(conn);
+            });
+            labelContainer.appendChild(labelInput);
+            contextMenu.appendChild(labelContainer);
+
+            contextMenu.appendChild(createSeparator());
+
+            // Thickness
+            const thickTitle = document.createElement('div');
+            thickTitle.className = 'menu-section-title';
+            thickTitle.innerText = 'Thickness (px)';
+            contextMenu.appendChild(thickTitle);
+
+            const inputContainer = document.createElement('div');
+            inputContainer.style.padding = '5px 15px';
+            const numInput = document.createElement('input');
+            numInput.type = 'number';
+            numInput.min = '1';
+            numInput.max = '50';
+            numInput.value = conn.width;
+            numInput.style.width = '100%';
+            numInput.style.padding = '8px';
+            numInput.style.borderRadius = '8px';
+            numInput.style.border = '1px solid #bdc3c7';
+            numInput.style.outline = 'none';
+            numInput.style.boxSizing = 'border-box';
+            numInput.onclick = (e) => e.stopPropagation();
+            numInput.addEventListener('input', (e) => {
+                const val = parseInt(e.target.value);
+                if (val > 0) {
+                    conn.width = val;
+                    updateConnectionStyle(conn);
+                }
+            });
+            inputContainer.appendChild(numInput);
+            contextMenu.appendChild(inputContainer);
+
+            // Separator
+            contextMenu.appendChild(createSeparator());
+
+            // Style
+            const styleFrag = document.createDocumentFragment();
+            [{id:'straight',l:'Straight'},{id:'metro',l:'Metro (Step)'},{id:'fork',l:'Fork (Tree)'},{id:'curved',l:'Curved'}].forEach(s => {
+                const item = document.createElement('div');
+                item.className = 'menu-item';
+                item.innerText = s.l;
+                item.onclick = (e) => { e.stopPropagation(); conn.type = s.id; updateConnectionPosition(conn); hideContextMenu(); };
+                styleFrag.appendChild(item);
+            });
+            contextMenu.appendChild(buildSubmenu('Line Style', styleFrag));
+
+            // Pattern
+            const patternFrag = document.createDocumentFragment();
+            [{id:'solid',l:'Solid'},{id:'dashed',l:'Dashed'},{id:'dotted',l:'Dotted'}].forEach(p => {
+                const item = document.createElement('div');
+                item.className = 'menu-item';
+                item.innerText = p.l;
+                item.onclick = (e) => { e.stopPropagation(); conn.pattern = p.id; updateConnectionStyle(conn); hideContextMenu(); };
+                patternFrag.appendChild(item);
+            });
+            contextMenu.appendChild(buildSubmenu('Line Pattern', patternFrag));
+
+            // Separator
+            contextMenu.appendChild(createSeparator());
+
+            // Color
+            contextMenu.appendChild(buildColorSubmenu('Line Color', (color) => {
+                conn.color = color;
+                updateConnectionStyle(conn);
+            }));
+            
+            // Separator
+            contextMenu.appendChild(createSeparator());
+            
+            const delItem = document.createElement('div');
+            delItem.className = 'menu-item';
+            delItem.innerHTML = '<span style="color: #FF6B6B">Delete Line</span>';
+            delItem.onclick = (e) => { e.stopPropagation(); deleteConnection(conn); hideContextMenu(); };
+            contextMenu.appendChild(delItem);
+        }
+
+        function createSeparator() {
+            const sep = document.createElement('div');
+            sep.className = 'separator';
+            return sep;
+        }
+
+        function buildNodeMenu(node) {
+            contextMenu.innerHTML = '';
+            
+            // Status Toggle
+            const data = nodeData.get(node);
+            const statusItem = document.createElement('div');
+            statusItem.className = 'menu-item';
+            statusItem.innerHTML = data.isCompleted 
+                ? '<span style="color:#e74c3c"><i class="fa-solid fa-xmark"></i> Mark Incomplete</span>'
+                : '<span style="color:#2ecc71"><i class="fa-solid fa-check"></i> Mark Completed</span>';
+            
+            statusItem.onclick = (e) => {
+                e.stopPropagation();
+                data.isCompleted = !data.isCompleted;
+                if (data.isCompleted) node.classList.add('completed');
+                else node.classList.remove('completed');
+                hideContextMenu();
+            };
+            contextMenu.appendChild(statusItem);
+
+            contextMenu.appendChild(createSeparator());
+            contextMenu.appendChild(buildShapeSection());
+            contextMenu.appendChild(createSeparator());
+            contextMenu.appendChild(buildColorSubmenu('Node Color', (color) => {
+                const data = nodeData.get(node);
+                data.color = color;
+                setNodeColor(node, color);
+            }));
+        }
+
+        // --- Initialization ---
+        function init() {
+            // Place initial node in visual center accounting for default zoom
+            const winW = window.innerWidth;
+            const winH = window.innerHeight;
+            createNode((winW - 150) / 2, (winH - 150) / 2);
+            updateTransform();
+        }
+        window.onload = init;
+
+        // --- Toolbar ---
+        addNodeBtn.addEventListener('click', () => {
+            const winW = window.innerWidth;
+            const winH = window.innerHeight;
+            // Place in center of VIEWPORT, not screen
+            const center = screenToWorld(winW/2, winH/2);
+            
+            const offsetX = (Math.random() - 0.5) * 100;
+            const offsetY = (Math.random() - 0.5) * 100;
+            
+            createNode(center.x + offsetX - 75, center.y + offsetY - 75);
+        });
+
+        clearBtn.addEventListener('click', () => {
+            if(confirm("Clear all nodes?")) {
+                nodeCanvas.innerHTML = '';
+                connectorLayer.innerHTML = '<defs id="connectorDefs"></defs>';
+                connections.length = 0; 
+            }
+        });
+
+        linkBtn.addEventListener('click', () => {
+            globalState.connectionMode = !globalState.connectionMode;
+            linkBtn.classList.toggle('active', globalState.connectionMode);
+            if (!globalState.connectionMode && globalState.connectionSource) {
+                globalState.connectionSource.classList.remove('selected-source');
+                globalState.connectionSource = null;
+            }
+        });
+
+        // --- Connections ---
+        function handleConnectionClick(node) {
+            if (!globalState.connectionSource) {
+                globalState.connectionSource = node;
+                node.classList.add('selected-source');
+            } else {
+                if (globalState.connectionSource === node) {
+                    node.classList.remove('selected-source');
+                    globalState.connectionSource = null;
+                    return;
+                }
+                const exists = connections.find(c => 
+                    (c.source === globalState.connectionSource && c.target === node) || 
+                    (c.source === node && c.target === globalState.connectionSource)
+                );
+                if (!exists) createConnection(globalState.connectionSource, node);
+                globalState.connectionSource.classList.remove('selected-source');
+                globalState.connectionSource = null;
+            }
+        }
+
+        function createConnection(nodeA, nodeB) {
+            const id = 'conn-' + Math.random().toString(36).substr(2, 9);
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('id', id);
+            path.classList.add('connector');
+            
+            const defaultColor = '#bdc3c7';
+            const defaultWidth = 2; 
+
+            // 1. Halo Element (Background Eraser)
+            const haloElement = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            haloElement.classList.add('label-base', 'connector-label-halo');
+            const haloPath = document.createElementNS('http://www.w3.org/2000/svg', 'textPath');
+            haloPath.setAttribute('href', '#' + id);
+            haloPath.setAttribute('startOffset', '50%');
+            haloElement.appendChild(haloPath);
+
+            // 2. Text Element (Visible Text)
+            const textElement = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            textElement.classList.add('label-base', 'connector-label-text');
+            const textPath = document.createElementNS('http://www.w3.org/2000/svg', 'textPath');
+            textPath.setAttribute('href', '#' + id);
+            textPath.setAttribute('startOffset', '50%');
+            textElement.appendChild(textPath);
+            
+            // Order matters: Line -> Halo -> Text
+            connectorLayer.appendChild(path);
+            connectorLayer.appendChild(haloElement);
+            connectorLayer.appendChild(textElement); 
+
+            const conn = { 
+                source: nodeA, target: nodeB, element: path, 
+                haloElement: haloElement, labelElement: textElement,
+                labelText: '', color: defaultColor, width: defaultWidth, type: 'straight', pattern: 'solid' 
+            };
+            updateConnectionStyle(conn);
+            updateConnectionPosition(conn);
+            connections.push(conn);
+            connectionData.set(path, conn); 
+        }
+
+        function updateConnectionLabel(conn) {
+            // Update both the halo (background) and the visible text
+            conn.haloElement.querySelector('textPath').textContent = conn.labelText;
+            conn.labelElement.querySelector('textPath').textContent = conn.labelText;
+        }
+
+        function deleteConnection(conn) {
+            const index = connections.indexOf(conn);
+            if (index > -1) connections.splice(index, 1);
+            conn.element.remove();
+            if(conn.haloElement) conn.haloElement.remove();
+            if(conn.labelElement) conn.labelElement.remove();
+        }
+
+        function updateConnectionStyle(conn) {
+            conn.element.setAttribute('stroke', conn.color);
+            conn.element.setAttribute('stroke-width', conn.width);
+            let dashArray = 'none';
+            if (conn.pattern === 'dashed') dashArray = `${conn.width * 3}, ${conn.width * 2}`;
+            else if (conn.pattern === 'dotted') {
+                dashArray = `${conn.width}, ${conn.width * 2}`;
+                conn.element.setAttribute('stroke-linecap', 'round');
+            }
+            conn.element.setAttribute('stroke-dasharray', dashArray);
+        }
+
+        function updateConnectionPosition(conn) {
+            const dataA = nodeData.get(conn.source);
+            const dataB = nodeData.get(conn.target);
+            const offsetA = conn.source.offsetWidth / 2;
+            const offsetB = conn.target.offsetWidth / 2;
+            
+            // Raw coordinates (Source -> Target)
+            let x1 = dataA.x + offsetA;
+            let y1 = dataA.y + offsetA;
+            let x2 = dataB.x + offsetB;
+            let y2 = dataB.y + offsetB;
+
+            let d = '';
+
+            // LOGIC: Only swap coordinates for non-directional lines (Straight/Curved)
+            // to keep text readable. For Fork/Metro, strict Source->Target direction 
+            // is required to maintain the shape, even if text ends up upside down.
+            
+            if (conn.type === 'metro') {
+                // Horizontal -> Vertical -> Horizontal
+                const midX = (x1 + x2) / 2;
+                d = `M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}`;
+            } else if (conn.type === 'fork') {
+                // Vertical -> Horizontal -> Vertical (Tree/Org Chart style)
+                // We use a FIXED offset (e.g., 80px) so multiple connections from the same
+                // parent overlap perfectly to look like a single branching tree.
+                const midY = y1 + 80; 
+                d = `M ${x1} ${y1} L ${x1} ${midY} L ${x2} ${midY} L ${x2} ${y2}`;
+            } else {
+                // For Straight and Curved, we can swap to ensure Left->Right text flow
+                let sx = x1, sy = y1, tx = x2, ty = y2;
+                if (x1 > x2) {
+                    [sx, tx, sy, ty] = [x2, x1, y2, y1];
+                }
+
+                if (conn.type === 'curved') {
+                    const cx1 = (sx + tx) / 2;
+                    const cy1 = sy;
+                    const cx2 = (sx + tx) / 2;
+                    const cy2 = ty;
+                    d = `M ${sx} ${sy} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${tx} ${ty}`;
+                } else {
+                    // Straight
+                    d = `M ${sx} ${sy} L ${tx} ${ty}`;
+                }
+            }
+            conn.element.setAttribute('d', d);
+        }
+
+        // --- Interaction Logic (Drag / Pan) ---
+        function onDragStart(e) {
+            if (e.button === 2) return; 
+
+            // FIX: If clicking inside context menu, do nothing (let the menu click handler work)
+            if (e.target.closest('#contextMenu')) return;
+            
+            const node = e.target.closest('.node-container');
+            const isConnector = e.target.classList.contains('connector');
+            const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+            const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+
+            hideContextMenu();
+
+            // Case 1: Dragging a Node
+            if (node) {
+                const data = nodeData.get(node);
+                globalState.draggingNode = node;
+                globalState.dragDistance = 0;
+                globalState.startX = clientX;
+                globalState.startY = clientY;
+                globalState.initialNodeX = data.x;
+                globalState.initialNodeY = data.y;
+                node.querySelector('.neumorphic-shape').classList.add('pressing');
+                return;
+            }
+
+            // Case 2: Panning (Clicked on background, not connector, not node)
+            if (!node && !isConnector) {
+                globalState.isPanning = true;
+                globalState.dragDistance = 0;
+                globalState.startX = clientX;
+                globalState.startY = clientY;
+                globalState.panStartX = globalState.viewX;
+                globalState.panStartY = globalState.viewY;
+                document.body.classList.add('panning');
+            }
+        }
+
+        function onDragMove(e) {
+            const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+            const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+
+            // Handle Pan
+            if (globalState.isPanning) {
+                e.preventDefault();
+                const dx = clientX - globalState.startX;
+                const dy = clientY - globalState.startY;
+                globalState.dragDistance += Math.abs(dx) + Math.abs(dy);
+
+                globalState.viewX = globalState.panStartX + dx;
+                globalState.viewY = globalState.panStartY + dy;
+                updateTransform();
+                return;
+            }
+
+            // Handle Node Drag
+            if (globalState.draggingNode) {
+                e.preventDefault();
+                const dx = (clientX - globalState.startX) / globalState.zoom; // Adjust for zoom!
+                const dy = (clientY - globalState.startY) / globalState.zoom;
+
+                globalState.dragDistance += Math.sqrt(dx*dx + dy*dy);
+                
+                const data = nodeData.get(globalState.draggingNode);
+                data.x = globalState.initialNodeX + dx;
+                data.y = globalState.initialNodeY + dy;
+
+                globalState.draggingNode.style.transform = `translate3d(${data.x}px, ${data.y}px, 0)`;
+
+                connections.forEach(conn => {
+                    if (conn.source === globalState.draggingNode || conn.target === globalState.draggingNode) {
+                        updateConnectionPosition(conn);
+                    }
+                });
+            }
+        }
+
+        function onDragEnd(e) {
+            // End Pan
+            if (globalState.isPanning) {
+                globalState.isPanning = false;
+                document.body.classList.remove('panning');
+                return;
+            }
+
+            // End Node Drag
+            if (globalState.draggingNode) {
+                const node = globalState.draggingNode;
+                node.querySelector('.neumorphic-shape').classList.remove('pressing');
+                
+                if (globalState.dragDistance < 5) {
+                    if (globalState.connectionMode) handleConnectionClick(node);
+                    else triggerMorph(node);
+                }
+                globalState.draggingNode = null;
+            }
+        }
+
+        window.addEventListener('mousedown', onDragStart);
+        window.addEventListener('mousemove', onDragMove);
+        window.addEventListener('mouseup', onDragEnd);
+        window.addEventListener('touchstart', onDragStart, {passive: false});
+        window.addEventListener('touchmove', onDragMove, {passive: false});
+        window.addEventListener('touchend', onDragEnd);
+
+        // --- Context Menu ---
+        window.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            const node = e.target.closest('.node-container');
+            const isConnector = e.target.classList.contains('connector');
+
+            if (!node && !isConnector) {
+                hideContextMenu();
+                return;
+            }
+
+            const menuWidth = 180;
+            const menuHeight = 350; 
+            let x = e.clientX;
+            let y = e.clientY;
+            
+            if (x + menuWidth > window.innerWidth) x -= menuWidth;
+            if (y + menuHeight > window.innerHeight) y -= menuHeight;
+
+            contextMenu.style.left = `${x}px`;
+            contextMenu.style.top = `${y}px`;
+
+            if (node) {
+                globalState.contextMenuTarget = node;
+                globalState.contextMenuType = 'node';
+                buildNodeMenu(node);
+            } else if (isConnector) {
+                const conn = connectionData.get(e.target);
+                if (!conn) return;
+                globalState.contextMenuTarget = conn;
+                globalState.contextMenuType = 'line';
+                buildLineMenu(conn);
+            }
+            contextMenu.classList.add('visible');
+        });
+
+        window.addEventListener('click', (e) => {
+            if (e.target.closest('#contextMenu')) return;
+            hideContextMenu();
+        });
+
+        function hideContextMenu() {
+            contextMenu.classList.remove('visible');
+            globalState.contextMenuTarget = null;
+            globalState.contextMenuType = null;
+        }
+
+        // --- Animation ---
+        function triggerMorph(node) {
+            const data = nodeData.get(node);
+            const nextIndex = (data.shapeIndex + 1) % shapes.length;
+            selectShape(node, nextIndex);
+        }
+
+        function selectShape(node, index) {
+            const data = nodeData.get(node);
+            data.shapeIndex = index;
+            const nextShape = shapes[index];
+            const label = node.querySelector('.label');
+            label.style.opacity = 0;
+            setTimeout(() => { label.innerText = nextShape.name; label.style.opacity = 1; }, 150);
+            animateMorph(node, data, nextShape.coords);
+        }
+
+        function easeOutElastic(x) {
+            const c4 = (2 * Math.PI) / 3;
+            if (x === 0) return 0;
+            if (x === 1) return 1;
+            return Math.pow(2, -10 * x) * Math.sin((x * 10 - 0.75) * c4) + 1;
+        }
+
+        function animateMorph(node, data, targetConfig) {
+            const poly = node.querySelector('polygon');
+            const startCoords = JSON.parse(JSON.stringify(data.currentPoints));
+            const startTime = performance.now();
+            const duration = 800; 
+
+            function update(currentTime) {
+                const elapsed = currentTime - startTime;
+                let progress = Math.min(elapsed / duration, 1);
+                const ease = easeOutElastic(progress);
+                for (let i = 0; i < POINT_COUNT; i++) {
+                    data.currentPoints[i].x = startCoords[i].x + (targetConfig[i].x - startCoords[i].x) * ease;
+                    data.currentPoints[i].y = startCoords[i].y + (targetConfig[i].y - startCoords[i].y) * ease;
+                }
+                const pointsStr = data.currentPoints.map(p => `${p.x},${p.y}`).join(' ');
+                poly.setAttribute('points', pointsStr);
+                if (progress < 1) data.animationFrame = requestAnimationFrame(update);
+            }
+            cancelAnimationFrame(data.animationFrame);
+            data.animationFrame = requestAnimationFrame(update);
+        }
+    </script>
+
+</body>
+</html>
+
+
+Can you add a calculator node
