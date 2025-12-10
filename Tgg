@@ -643,55 +643,56 @@
             text-align: center; outline: none; box-shadow: inset 1px 1px 3px var(--shadow-dark), inset -1px -1px 3px var(--shadow-light);
             -moz-appearance: textfield;
         }
-        input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-
-        /* Sliders */
-        input[type="range"] {
-            -webkit-appearance: none; appearance: none; width: 100%; height: 6px;
-            background: var(--input-border); border-radius: 3px; outline: none; cursor: pointer;
-            box-shadow: inset 1px 1px 2px var(--shadow-dark); margin: 8px 0; display: block;
-        }
-        input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%;
-            background: var(--text-color); cursor: pointer; box-shadow: 2px 2px 4px var(--shadow-dark);
-            border: 2px solid var(--bg-color); margin-top: -6px; position: relative; top: 50%;
-        }
-        input[type="range"]::-moz-range-thumb {
-            width: 18px; height: 18px; border-radius: 50%; background: var(--text-color); cursor: pointer;
-            border: 2px solid var(--bg-color); box-shadow: 2px 2px 4px var(--shadow-dark);
-        }
-
-        /* Line Styles */
-        .line-preview { width: 100%; background-color: var(--text-color); border-radius: 2px; }
-        .style-dashed { background: repeating-linear-gradient(90deg, var(--text-color), var(--text-color) 4px, transparent 4px, transparent 8px); height: 2px; border: 1px dashed var(--text-color); border: none; }
-        .style-dotted { background: repeating-linear-gradient(90deg, var(--text-color), var(--text-color) 2px, transparent 2px, transparent 6px); height: 2px; border: 1px dotted var(--text-color); border: none; }
-
-        /* Text Format Menu */
+        /* Text Format Menu - Fixed Top Bar */
         .text-menu {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-200%); /* Start hidden above screen */
             flex-direction: row;
-            flex-wrap: wrap;
-            gap: 4px;
-            padding: 8px;
-            width: 150px;
+            flex-wrap: nowrap;
+            gap: 10px;
+            padding: 10px 20px;
+            width: auto;
             justify-content: center;
+            z-index: 2500;
+            background: var(--bg-color);
+            border-radius: 50px; /* Pill shape for top bar */
+            box-shadow: 
+                5px 5px 10px var(--shadow-dark), 
+                -5px -5px 10px var(--shadow-light);
+            display: flex;
+            visibility: hidden;
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), visibility 0.3s;
+        }
+        
+        .text-menu.visible {
+            transform: translateX(-50%) translateY(0); /* Slide down */
+            visibility: visible;
+            animation: none; /* Disable context menu bounce */
         }
         
         .text-menu .menu-item {
-            width: 32px;
-            height: 32px;
+            width: 36px;
+            height: 36px;
             padding: 0;
             display: flex;
             justify-content: center;
             align-items: center;
             flex: 0 0 auto;
+            border-radius: 50%; /* Circular buttons */
         }
         
-        .text-menu .menu-icon { width: 16px; height: 16px; opacity: 0.8; }
+        .text-menu .menu-item:hover {
+            transform: translateY(-2px);
+        }
+        
+        .text-menu .menu-icon { width: 18px; height: 18px; opacity: 0.8; }
         .text-menu .separator {
-            width: 100%;
-            height: 1px;
+            width: 1px;
+            height: 24px;
             background: rgba(0,0,0,0.1);
-            margin: 4px 0;
+            margin: 0 5px;
         }
 
     </style>
@@ -776,6 +777,10 @@
         </div>
 
         <div class="menu-separator"></div>
+        <div class="menu-item" onclick="renameNode()">
+            <svg class="menu-icon" viewBox="0 0 24 24" style="margin-right:10px;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+            Rename
+        </div>
         <div class="menu-item" onclick="toggleNodeText()" id="text-toggle-item">
             <svg class="menu-icon" viewBox="0 0 24 24" style="margin-right:10px;"><path d="M4 20 L20 20 M12 4 L12 20 M6 4 L18 4" stroke-width="2" stroke-linecap="round"/></svg> <span id="text-toggle-label">Add Label</span>
         </div>
@@ -977,6 +982,13 @@
                 const listEl = n.querySelector('.post-call-list');
                 if (listEl) customContent = listEl.innerHTML;
 
+                // Check for renamed titles in special nodes
+                let title = null;
+                if (n.dataset.type === 'post-call' || n.dataset.type === 'complaint-board') {
+                    const header = n.querySelector('.post-call-header span:first-child');
+                    if (header) title = header.innerText;
+                }
+
                 nodesData.push({
                     id: n.id,
                     left: n.style.left,
@@ -989,7 +1001,8 @@
                     text: n.querySelector('.node-text') ? n.querySelector('.node-text').innerHTML : "",
                     completed: n.classList.contains('completed'),
                     color: color,
-                    customContent: customContent // Save list content
+                    customContent: customContent, // Save list content
+                    title: title // Save custom title
                 });
             });
 
@@ -1047,21 +1060,23 @@
                 
                 // Restore Custom List Content
                 if (n.customContent && n.type === 'complaint-board') {
-                    // Only restore content for complaint boards directly
-                    // Post-call nodes will auto-regenerate via triggerAutoUpdate
                     const listEl = wrapper.querySelector('.post-call-list');
                     if(listEl) listEl.innerHTML = n.customContent;
+                }
+
+                // Restore Custom Title
+                if (n.title && (n.type === 'post-call' || n.type === 'complaint-board')) {
+                    const header = wrapper.querySelector('.post-call-header span:first-child');
+                    if (header) header.innerText = n.title;
                 }
                 
                 updateNodeTransform(wrapper);
                 
-                // For text nodes, auto-fit might be needed if font loaded differently, but usually fine
                 if(n.type === 'text') fitNodeToText(wrapper);
             });
 
             // Restore Edges
             state.edges.forEach(eData => {
-                // We need to re-create the DOM element for the edge
                 const sourceNode = document.getElementById(eData.source);
                 const targetNode = document.getElementById(eData.target);
                 if(sourceNode && targetNode) {
@@ -1070,13 +1085,11 @@
                     line.id = eData.id;
                     line.setAttribute('d', getEdgePathD(parseFloat(sourceNode.style.left), parseFloat(sourceNode.style.top), parseFloat(targetNode.style.left), parseFloat(targetNode.style.top), eData.type));
                     line.addEventListener('contextmenu', (e) => showEdgeMenu(e, eData.id));
-                    // Mouse listeners for hover tracking
                     line.addEventListener('mouseenter', () => hoverEdgeId = eData.id);
                     line.addEventListener('mouseleave', () => hoverEdgeId = null);
                     
                     edgesLayer.insertBefore(line, edgesLayer.firstChild);
                     
-                    // Re-attach element to data object
                     eData.element = line;
                     edges.push(eData);
                     updateEdgeAppearance(eData);
@@ -1087,19 +1100,16 @@
         }
 
         function clearCanvas(save=true) {
-            // Remove Nodes
             const nodes = document.querySelectorAll('.node-wrapper');
             nodes.forEach(n => n.remove());
             
-            // Remove Edges
             edges.forEach(e => e.element.remove());
             edges = [];
             
-            // Reset IDs if fully clearing
             if(save) {
                 nextNodeId = 1;
                 nextEdgeId = 1;
-                saveState(); // Save empty state
+                saveState();
             }
         }
 
@@ -1128,10 +1138,8 @@
             let innerContent = '';
             
             if (type === 'text') {
-                // Text-only node
                 innerContent = `<div class="node-text visible" contenteditable="true" spellcheck="false">Type here...</div>`;
             } else if (type === 'post-call') {
-                // Post Call Work Node
                 innerContent = `
                     <div class="post-call-wrapper">
                         <div class="post-call-header">
@@ -1150,7 +1158,6 @@
                     </div>
                 `;
             } else if (type === 'complaint-board') {
-                // Complaint Board Node
                 innerContent = `
                     <div class="post-call-wrapper">
                         <div class="post-call-header" style="color:var(--danger-color)">
@@ -1165,7 +1172,6 @@
                     </div>
                 `;
             } else {
-                // Shape node
                 innerContent = `
                     <svg viewBox="0 0 200 200" preserveAspectRatio="none" width="100%" height="100%" style="overflow:visible"><path d="${getDString(CONFIG[type])}" stroke-width="${CONFIG[type].stroke}" /></svg>
                     <div class="node-text" contenteditable="true" spellcheck="false"></div>
@@ -1187,7 +1193,6 @@
             });
             wrapper.addEventListener('contextmenu', (e) => showNodeMenu(e, id));
             
-            // Text Node Interaction: Double click to edit
             if (type === 'text') {
                 wrapper.addEventListener('dblclick', (e) => {
                     e.stopPropagation();
@@ -1195,7 +1200,6 @@
                 });
             }
             
-            // Text Auto-Sizing & Menu Logic (Only for standard shape nodes)
             const textEl = wrapper.querySelector('.node-text');
             if (textEl && type !== 'text') {
                 textEl.addEventListener('input', () => {
@@ -1210,10 +1214,9 @@
                 textEl.addEventListener('blur', () => {
                     textMenu.classList.remove('visible');
                     activeTextNodeId = null;
-                    // Remove editing state for text nodes
                     wrapper.classList.remove('editing');
                     saveState(); 
-                    triggerAutoUpdate(); // Auto update post call on text change
+                    triggerAutoUpdate(); 
                 });
                 textEl.addEventListener('keyup', updateTextMenuPos);
             }
@@ -1221,7 +1224,6 @@
             world.appendChild(wrapper);
             if(type === 'text') fitNodeToText(wrapper);
             if(!forceId) saveState(); 
-            // If creating a post call node, populate it immediately
             if(type === 'post-call') setTimeout(() => collectCompletedWork(id), 100);
             return wrapper;
         }
@@ -1236,13 +1238,11 @@
             hideMenus();
         }
 
-        // Trigger updates for ALL post call nodes
         function triggerAutoUpdate() {
             const postCallNodes = document.querySelectorAll('.node-wrapper[data-type="post-call"]');
             postCallNodes.forEach(node => collectCompletedWork(node.id));
         }
 
-        // Logic to add item to complaint board
         function addComplaint(nodeId) {
             const input = document.getElementById(`input-${nodeId}`);
             const list = document.getElementById(`list-${nodeId}`);
@@ -1259,13 +1259,13 @@
             input.value = '';
             list.scrollTop = list.scrollHeight;
             saveState();
-            triggerAutoUpdate(); // Update listeners
+            triggerAutoUpdate(); 
         }
 
         function deleteComplaintItem(btn) {
             btn.parentElement.remove();
             saveState();
-            triggerAutoUpdate(); // Update listeners
+            triggerAutoUpdate(); 
         }
 
         function copyPostCallData(nodeId) {
@@ -1278,20 +1278,11 @@
             let clipboardText = "POST CALL WORK SUMMARY:\n\n";
 
             items.forEach(item => {
-                // Get the title (node source)
                 const titleEl = item.querySelector('small');
                 let title = titleEl ? titleEl.innerText : "Unknown Source";
                 
-                // Get the content div
-                const contentDiv = item.querySelector('div:not(:first-child)'); // Skip small, get div
-                // If the structure is strictly small + div, we can select the div directly
-                // Note: The delete button is also a div in complaint items inside the board, 
-                // but in post-call aggregation, we stripped the delete button.
-                
-                // However, let's grab the raw text logic safely
                 let contentText = "";
                 
-                // Check if it's a UL list (from complaint board)
                 const ul = item.querySelector('ul');
                 if (ul) {
                     const lis = ul.querySelectorAll('li');
@@ -1299,17 +1290,13 @@
                         contentText += `- ${li.innerText}\n`;
                     });
                 } else {
-                    // Standard text
-                    // We need to be careful not to grab the title text again if using innerText on parent
-                    // Let's grab the specific content node we created in createPostCallItem
-                    const div = item.querySelector('div');
+                    const div = item.querySelector('div:last-child');
                     if(div) contentText = div.innerText;
                 }
 
                 clipboardText += `${title}:\n${contentText}\n\n`;
             });
 
-            // Copy to clipboard using textarea hack for reliability in iframes
             const ta = document.createElement('textarea');
             ta.value = clipboardText;
             document.body.appendChild(ta);
@@ -1317,7 +1304,6 @@
             document.execCommand('copy');
             document.body.removeChild(ta);
 
-            // Visual Feedback
             const btn = document.getElementById(`copy-btn-${nodeId}`);
             const originalHtml = btn.innerHTML;
             btn.innerHTML = `<span style="color:var(--success-color)">✓ Copied!</span>`;
@@ -1336,33 +1322,36 @@
             let foundCount = 0;
             
             nodes.forEach(n => {
-                if (n.id === nodeId) return; // Skip self
+                if (n.id === nodeId) return; 
 
-                // 1. Check for Completed Shape Nodes
+                let sourceTitle = n.dataset.type;
+                if (n.dataset.type === 'complaint-board') {
+                    const header = n.querySelector('.post-call-header span:first-child');
+                    if (header) sourceTitle = header.innerText;
+                } else if (['triangle','circle','rectangle','pill','pentagon','hexagon'].includes(n.dataset.type)) {
+                    sourceTitle = n.dataset.type.charAt(0).toUpperCase() + n.dataset.type.slice(1);
+                }
+
                 if (n.classList.contains('completed')) {
                     const textEl = n.querySelector('.node-text');
                     if (textEl && textEl.innerText.trim().length > 0) {
                         foundCount++;
-                        createPostCallItem(listContainer, n.dataset.type, n.id, textEl.innerText, 'var(--success-color)');
+                        createPostCallItem(listContainer, sourceTitle, n.id, textEl.innerText, 'var(--success-color)');
                     }
                 }
 
-                // 2. Check for Complaint Board Nodes
                 if (n.dataset.type === 'complaint-board') {
-                    // Find all items inside the complaint list
                     const complaints = n.querySelectorAll('.post-call-item div:first-child');
                     
                     if(complaints.length > 0) {
                         foundCount++;
-                        // Build list of complaint texts
                         let htmlContent = '<ul style="margin:0; padding-left:20px;">';
                         complaints.forEach(c => {
                             htmlContent += `<li>${c.innerText}</li>`;
                         });
                         htmlContent += '</ul>';
                         
-                        // Create grouped item
-                        createPostCallItem(listContainer, 'Complaint Board', n.id, htmlContent, 'var(--danger-color)');
+                        createPostCallItem(listContainer, sourceTitle, n.id, htmlContent, 'var(--danger-color)');
                     }
                 }
             });
@@ -1370,23 +1359,15 @@
             if (foundCount === 0) {
                 listContainer.innerHTML = '<div style="text-align:center; opacity:0.5; padding:20px;">No data found.<br><br>Mark shapes as Complete (✓) or add items to Complaint Boards.</div>';
             }
-            // Note: We don't save state here to avoid infinite loops or saving derived data unnecessarily
         }
 
-        function createPostCallItem(container, type, id, content, color) {
+        function createPostCallItem(container, title, id, content, color) {
             const item = document.createElement('div');
             item.className = 'post-call-item';
             item.style.borderLeftColor = color;
             
-            // Format Title nicely
-            let typeLabel = type;
-            // Clean up basic shapes
-            if (['triangle','circle','rectangle','pill','pentagon','hexagon'].includes(type)) {
-                typeLabel = type.charAt(0).toUpperCase() + type.slice(1);
-            }
-            
             item.innerHTML = `
-                <small style="color:${color}; font-weight:bold;">${typeLabel} #${id.split('-')[1]}</small>
+                <small style="color:${color}; font-weight:bold;">${title} #${id.split('-')[1]}</small>
                 <div>${content}</div>
             `;
             container.appendChild(item);
@@ -1397,14 +1378,28 @@
             const textEl = wrapper.querySelector('.node-text');
             wrapper.classList.add('editing');
             textEl.focus();
+            activeTextNodeId = nodeId;
+            updateTextMenuPos();
+            textMenu.classList.add('visible');
             
-            // Move cursor to end
             const range = document.createRange();
             const sel = window.getSelection();
             range.selectNodeContents(textEl);
             range.collapse(false);
             sel.removeAllRanges();
             sel.addRange(range);
+        }
+
+        function exitTextEditing() {
+            if (!activeTextNodeId) return;
+            const wrapper = document.getElementById(activeTextNodeId);
+            if (wrapper) wrapper.classList.remove('editing');
+            
+            textMenu.classList.remove('visible');
+            activeTextNodeId = null;
+            
+            saveState();
+            triggerAutoUpdate();
         }
 
         function fitNodeToText(wrapper) {
@@ -1511,7 +1506,6 @@
             connectedEdges.forEach(edge => {
                 const s = document.getElementById(edge.source);
                 const t = document.getElementById(edge.target);
-                // If node deleted, skip
                 if(!s || !t) return;
                 
                 const x1 = parseFloat(s.style.left); const y1 = parseFloat(s.style.top);
@@ -1562,7 +1556,7 @@
             const edgeData = { id: eid, source: sourceId, target: targetId, element: line, width: defaultWidth, spacing: 3, style: 'solid', type: type, color: null };
             edges.push(edgeData);
             updateEdgeAppearance(edgeData);
-            saveState(); // Auto save
+            saveState(); 
         }
 
         // --- Interaction Handlers ---
@@ -1570,7 +1564,9 @@
         viewport.addEventListener('mousedown', (e) => {
             if (connectionMode.active) { cancelConnection(); return; }
             if (e.target.closest('.node-wrapper')) return; 
-            if (e.target.closest('.tool-btn')) return; // Don't drag on tool click
+            if (e.target.closest('.tool-btn')) return; 
+            if (e.target.closest('#text-menu')) return; 
+            
             if (e.button !== 0) return; 
             isDraggingCanvas = true;
             lastMouse = { x: e.clientX, y: e.clientY };
@@ -1579,16 +1575,20 @@
         });
 
         viewport.addEventListener('dblclick', (e) => {
+            if (activeTextNodeId) {
+                if (!e.target.closest(`#${activeTextNodeId}`) && !e.target.closest('#text-menu')) {
+                    exitTextEditing();
+                    return; 
+                }
+            }
+
             if (e.target.closest('.node-wrapper') || e.target.closest('.tool-btn') || e.target.closest('.context-menu')) return;
             e.preventDefault();
             
             const wMx = (e.clientX - view.x) / view.zoom;
             const wMy = (e.clientY - view.y) / view.zoom;
             
-            // Create a text-only node
             const wrapper = createNode(wMx, wMy, 'text');
-            
-            // Activate text edit mode immediately
             enableTextEditing(wrapper.id);
         });
 
@@ -1600,6 +1600,7 @@
             if (isDraggingCanvas) {
                 view.x += dx; view.y += dy;
                 updateWorldTransform();
+                if(activeTextNodeId) updateTextMenuPos();
             } else if (isDraggingNode && activeNodeId) {
                 const node = document.getElementById(activeNodeId);
                 const wDx = dx / view.zoom; const wDy = dy / view.zoom;
@@ -1607,6 +1608,7 @@
                 node.style.top = `${parseFloat(node.style.top) + wDy}px`;
                 updateEdgePositions(activeNodeId);
                 node.dataset.hasDragged = "true";
+                if(activeTextNodeId === activeNodeId) updateTextMenuPos();
             } else if (connectionMode.active && connectionMode.tempLine) {
                 const wMx = (e.clientX - view.x) / view.zoom;
                 const wMy = (e.clientY - view.y) / view.zoom;
@@ -1617,19 +1619,18 @@
         });
 
         window.addEventListener('mouseup', () => {
-            if(isDraggingNode) saveState(); // Save after drag
+            if(isDraggingNode) saveState(); 
             isDraggingCanvas = false; isDraggingNode = false; activeNodeId = null;
             viewport.classList.remove('panning');
         });
 
         window.addEventListener('keydown', (e) => {
             if (e.key === 'Delete' || e.key === 'Backspace') {
-                if (activeTextNodeId) return; // Don't delete if editing text
+                if (activeTextNodeId) return; 
                 
                 if (hoverNodeId) {
                     deleteNode(hoverNodeId);
                 } else if (hoverEdgeId) {
-                    // Logic to delete hovered edge
                     contextEdgeId = hoverEdgeId;
                     deleteEdge();
                 }
@@ -1648,6 +1649,7 @@
             view.y -= wMy * (newZoom - view.zoom);
             view.zoom = newZoom;
             updateWorldTransform();
+            if(activeTextNodeId) updateTextMenuPos();
         }, { passive: false });
 
         viewport.addEventListener('contextmenu', (e) => {
@@ -1667,13 +1669,11 @@
             const isComplaintNode = node.dataset.type === 'complaint-board';
             const isEditing = node.classList.contains('editing');
 
-            // Handle drag permissions based on node type
             if (e.target.classList.contains('node-text')) {
-                if (!isTextNode) return; // Standard shape: don't drag on text
-                if (isTextNode && isEditing) return; // Text node editing: don't drag
+                if (!isTextNode) return; 
+                if (isTextNode && isEditing) return; 
             }
             
-            // Don't drag if clicking buttons inside post-call or complaint node
             if ((isPostCallNode || isComplaintNode) && (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.closest('.post-call-btn') || e.target.closest('.complaint-add-btn') || e.target.classList.contains('item-delete-btn'))) return;
             
             e.stopPropagation(); 
@@ -1694,17 +1694,15 @@
             if (!wrapper) { if (!e.target.closest('.context-menu')) hideMenus(); return; }
             if (wrapper.dataset.hasDragged === "true") return;
             if (e.target.classList.contains('node-text')) return;
-            // Don't rotate special nodes
             if (wrapper.dataset.type === 'post-call' || wrapper.dataset.type === 'complaint-board') return; 
 
             const type = wrapper.dataset.type;
             
-            // Text nodes don't rotate on single click
             if (type !== 'text') {
                 const deg = (type==='rectangle'||type==='pill') ? 90 : 60;
                 wrapper.dataset.rotation = parseFloat(wrapper.dataset.rotation) + deg;
                 updateNodeTransform(wrapper);
-                saveState(); // Save on rotate
+                saveState(); 
             }
         }, true);
 
@@ -1718,18 +1716,15 @@
             const path = node.querySelector('path');
             const rot = node.dataset.rotation;
             const scale = node.dataset.scale;
-            // Text nodes don't have paths to rotate, apply to wrapper if needed, or skip
             if (path) {
                 path.style.transform = `rotate(${rot}deg) scale(${scale})`;
             } else if (node.dataset.type === 'text') {
-                // Scale effect for text nodes hover
                 node.style.transform = `translate(-50%, -50%) scale(${scale})`;
             }
         }
 
         function updateWorldTransform() {
             world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.zoom})`;
-            // Update Grid parallax if desired, but fixed bg works fine
             document.querySelector('.grid-background').style.backgroundPosition = `${view.x}px ${view.y}px`;
             document.querySelector('.grid-background').style.backgroundSize = `${40 * view.zoom}px ${40 * view.zoom}px`;
         }
@@ -1745,18 +1740,16 @@
             contextNodeId = nodeId;
             
             const node = document.getElementById(nodeId);
-            if (!node) return; // Safety check
+            if (!node) return; 
 
             const isTextNode = node.dataset.type === 'text';
             const isPostCall = node.dataset.type === 'post-call';
             const isComplaint = node.dataset.type === 'complaint-board';
             
-            // Toggle visibility of Shape/Label options based on node type
             const shapeItem = document.querySelector('#node-menu .has-submenu');
             const labelItem = document.getElementById('text-toggle-item');
             const completeItem = document.getElementById('complete-toggle-item');
             
-            // Defaults
             if(shapeItem) shapeItem.style.display = 'flex';
             if(labelItem) labelItem.style.display = 'flex';
             if(completeItem) completeItem.style.display = 'flex';
@@ -1766,14 +1759,12 @@
                 if(labelItem) labelItem.style.display = 'none';
                 if(completeItem) completeItem.style.display = 'none';
             } else {
-                // Standard Shape
                 const textEl = node.querySelector('.node-text');
                 const labelSpan = document.getElementById('text-toggle-label');
                 if (labelSpan && textEl) {
                     labelSpan.innerText = textEl.classList.contains('visible') ? "Remove Label" : "Add Label";
                 }
                 
-                // Check complete status
                 const completeSpan = document.getElementById('complete-toggle-label');
                 if (completeSpan) {
                     completeSpan.innerText = node.classList.contains('completed') ? "Mark Incomplete" : "Mark Complete";
@@ -1813,6 +1804,38 @@
             textMenu.classList.remove('visible');
         }
 
+        // --- Rename Logic ---
+        
+        window.renameNode = function() {
+            if (!contextNodeId) return;
+            const node = document.getElementById(contextNodeId);
+            const type = node.dataset.type;
+
+            let currentName = "";
+            let titleEl = null;
+
+            if (type === 'post-call' || type === 'complaint-board') {
+                titleEl = node.querySelector('.post-call-header span:first-child');
+                currentName = titleEl.innerText;
+            } else if (type === 'text') {
+                enableTextEditing(contextNodeId);
+                hideMenus();
+                return;
+            } else {
+                toggleNodeText();
+                hideMenus();
+                return;
+            }
+
+            const newName = prompt("Rename Node:", currentName);
+            if (newName && newName.trim() !== "") {
+                titleEl.innerText = newName;
+                saveState();
+                triggerAutoUpdate(); 
+            }
+            hideMenus();
+        }
+
         // --- Text Menu Logic ---
         
         window.formatText = function(cmd, value=null) {
@@ -1828,14 +1851,8 @@
         };
 
         function updateTextMenuPos() {
-            if(!activeTextNodeId) return;
-            const wrapper = document.getElementById(activeTextNodeId);
-            const textEl = wrapper.querySelector('.node-text');
-            if(!textEl) return;
-            const rect = textEl.getBoundingClientRect();
-            
-            textMenu.style.left = `${rect.left + (rect.width/2) - (textMenu.offsetWidth/2)}px`;
-            textMenu.style.top = `${rect.top - 70}px`; 
+            // No positioning logic needed anymore.
+            // The menu is fixed to the top of the screen via CSS.
         }
 
         // --- Connection & Fork Logic ---
@@ -1938,15 +1955,12 @@
             const idToDelete = targetId || contextNodeId;
             if (!idToDelete) return;
 
-            // Remove Node DOM
             const node = document.getElementById(idToDelete);
             if(node) node.remove();
 
-            // Find connected edges
             const connectedEdges = edges.filter(e => e.source === idToDelete || e.target === idToDelete);
             connectedEdges.forEach(e => e.element.remove());
 
-            // Remove from data array
             edges = edges.filter(e => e.source !== idToDelete && e.target !== idToDelete);
 
             hideMenus();
@@ -1986,7 +2000,6 @@
         window.changeNodeShape = (type) => { 
             if(contextNodeId) {
                 const w = document.getElementById(contextNodeId);
-                // Can't change shape of text node to geometry or vice versa easily without complex logic, so restrictive
                 if(w.dataset.type === 'text') return;
 
                 const currentType = w.dataset.type; 
