@@ -1,0 +1,2031 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neumorphic Infinite Canvas - Complete</title>
+    <style>
+        :root {
+            /* Neumorphic Palette */
+            --bg-color: #e0e5ec;
+            --shadow-light: #ffffff;
+            --shadow-dark: #a3b1c6;
+            --text-color: #4d5b7c;
+            --menu-hover: #d1d9e6;
+            --line-color: #a3b1c6;
+            --danger-color: #ff6b6b;
+            --success-color: #6bcb77;
+            --input-bg: #e0e5ec;
+            --input-border: #a3b1c6;
+        }
+
+        body {
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: var(--bg-color);
+            font-family: 'Segoe UI', sans-serif;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* The Viewport */
+        .viewport {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            cursor: default;
+        }
+
+        .viewport.panning {
+            cursor: grabbing;
+        }
+
+        /* The Infinite World Container */
+        .world {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 0; 
+            height: 0;
+            transform-origin: 0 0;
+        }
+
+        /* Dot Grid Background */
+        .grid-background {
+            position: absolute;
+            top: -50000px;
+            left: -50000px;
+            width: 100000px;
+            height: 100000px;
+            background-image: radial-gradient(var(--text-color) 1px, transparent 1px);
+            background-size: 40px 40px;
+            opacity: 0.1;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        /* Edges Layer */
+        .edges-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            overflow: visible;
+            width: 1px;
+            height: 1px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Connection Lines */
+        .connection-line {
+            stroke: var(--line-color);
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            fill: none;
+            pointer-events: visibleStroke;
+            cursor: pointer;
+            transition: stroke 0.2s; 
+        }
+
+        .connection-line:hover {
+            stroke: var(--text-color);
+        }
+
+        .temp-line {
+            stroke: var(--text-color);
+            stroke-width: 2;
+            stroke-dasharray: 5, 5;
+            opacity: 0.6;
+            fill: none;
+        }
+
+        /* Node Styling */
+        .node-wrapper {
+            position: absolute;
+            width: 200px;
+            height: 200px;
+            transform: translate(-50%, -50%);
+            cursor: grab;
+            will-change: transform, width, height; 
+            z-index: 1;
+            filter: 
+                drop-shadow(9px 9px 16px var(--shadow-dark)) 
+                drop-shadow(-9px -9px 16px var(--shadow-light));
+            
+            /* Center Content */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: width 0.1s, height 0.1s; 
+        }
+
+        .node-wrapper.connecting-source {
+            filter: drop-shadow(0 0 10px var(--text-color));
+        }
+
+        .node-wrapper:active {
+            cursor: grabbing;
+        }
+
+        .node-wrapper svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+
+        .node-wrapper path {
+            fill: var(--bg-color);
+            stroke: var(--bg-color);
+            stroke-linejoin: round;
+            stroke-linecap: round;
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), fill 0.3s, stroke 0.3s;
+            transform-origin: center;
+        }
+
+        /* Status Badge (Checkmark) */
+        .status-badge {
+            position: absolute;
+            top: 0; 
+            right: 0; 
+            width: 32px;
+            height: 32px;
+            background: transparent; 
+            border-radius: 50%;
+            display: none; 
+            justify-content: center;
+            align-items: center;
+            z-index: 3;
+            box-shadow: none; 
+            border: 3px solid var(--success-color);
+            color: var(--success-color);
+            pointer-events: none;
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .node-wrapper.completed .status-badge {
+            display: flex;
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0); }
+            100% { transform: scale(1); }
+        }
+
+        /* Node Text Overlay */
+        .node-text {
+            display: none; 
+            position: relative;
+            font-size: 1.1rem;
+            font-weight: 500;
+            color: var(--text-color);
+            text-align: center;
+            outline: none;
+            z-index: 2; 
+            min-width: 20px;
+            max-width: 160px; 
+            cursor: text;
+            user-select: text; 
+            pointer-events: auto;
+            border: 1px solid transparent;
+            padding: 4px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            transition: box-shadow 0.2s;
+        }
+
+        /* List Styling inside Node */
+        .node-text ul {
+            margin: 0;
+            padding-left: 20px;
+            text-align: left;
+        }
+        .node-text li {
+            margin-bottom: 2px;
+        }
+
+        .node-text.visible {
+            display: block;
+        }
+
+        .node-text:focus {
+            background: rgba(0,0,0,0.02);
+            box-shadow: inset 1px 1px 3px rgba(0,0,0,0.15), inset -1px -1px 3px rgba(255,255,255,0.7);
+        }
+        
+        .node-text:empty::before {
+            content: "Label";
+            opacity: 0.4;
+        }
+
+        /* --- Text-Only Node Styling --- */
+        .node-wrapper[data-type="text"] {
+            filter: none; /* Remove neumorphic shadows */
+            width: auto !important; 
+            height: auto !important;
+            padding: 10px; /* Hit area for dragging */
+            background: transparent;
+        }
+
+        .node-wrapper[data-type="text"] svg {
+            display: none; /* Hide the shape */
+        }
+
+        .node-wrapper[data-type="text"] .node-text {
+            display: block;
+            pointer-events: none; /* Allows drag clicks to pass through to wrapper */
+            text-align: left;
+            font-size: 1.2rem;
+            font-weight: 600;
+            min-width: 50px;
+            padding: 5px;
+            border: 1px dashed transparent;
+            background: transparent;
+            box-shadow: none;
+        }
+
+        /* Editing state for Text Node */
+        .node-wrapper[data-type="text"].editing .node-text {
+            pointer-events: auto; /* Enable text selection */
+            background: rgba(255,255,255,0.4);
+            border-color: var(--text-color);
+            box-shadow: 0 0 10px rgba(255,255,255,0.8);
+            cursor: text;
+        }
+
+        .node-wrapper[data-type="text"]:hover {
+             /* Visual cue that it's an object */
+             outline: 1px dashed rgba(0,0,0,0.1);
+             border-radius: 4px;
+        }
+
+        /* --- Post Call Node Styling --- */
+        .node-wrapper[data-type="post-call"],
+        .node-wrapper[data-type="complaint-board"] {
+            width: 300px;
+            height: 400px;
+            background-color: var(--bg-color);
+            border-radius: 12px;
+            /* Ensure the drop-shadow filter on the parent applies to this box */
+        }
+        
+        /* Hide any accidental SVGs in special nodes */
+        .node-wrapper[data-type="post-call"] svg,
+        .node-wrapper[data-type="complaint-board"] svg {
+            display: none;
+        }
+        
+        .post-call-wrapper {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 85%; height: 85%;
+            display: flex;
+            flex-direction: column;
+            color: var(--text-color);
+            pointer-events: none; /* Pass clicks to drag */
+        }
+
+        .post-call-header {
+            font-weight: 800;
+            text-transform: uppercase;
+            border-bottom: 2px solid rgba(0,0,0,0.05);
+            padding-bottom: 5px;
+            margin-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.9rem;
+            text-shadow: 1px 1px 0 rgba(255,255,255,0.5);
+        }
+
+        .post-call-list {
+            flex: 1;
+            overflow-y: auto;
+            background: rgba(0,0,0,0.03);
+            box-shadow: inset 2px 2px 5px rgba(0,0,0,0.1), inset -2px -2px 5px rgba(255,255,255,0.7);
+            border-radius: 8px;
+            padding: 8px;
+            font-size: 0.85rem;
+            pointer-events: auto; /* Allow scrolling */
+        }
+        
+        .post-call-list::-webkit-scrollbar { width: 4px; }
+        .post-call-list::-webkit-scrollbar-track { background: transparent; }
+        .post-call-list::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 4px; }
+
+        .post-call-item {
+            background: rgba(255,255,255,0.5);
+            padding: 8px;
+            margin-bottom: 6px;
+            border-radius: 4px;
+            box-shadow: 2px 2px 4px rgba(0,0,0,0.05);
+            border-left: 3px solid var(--success-color);
+            position: relative;
+        }
+
+        /* Styling specifically for complaints in the list */
+        .post-call-item.complaint-source {
+            border-left-color: var(--danger-color);
+        }
+        
+        .post-call-item small {
+            display: block;
+            font-size: 0.7em;
+            opacity: 0.6;
+            margin-bottom: 2px;
+        }
+
+        /* Delete button for complaint board items */
+        .item-delete-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            cursor: pointer;
+            color: var(--danger-color);
+            opacity: 0;
+            font-weight: bold;
+            transition: opacity 0.2s;
+        }
+        .post-call-item:hover .item-delete-btn { opacity: 1; }
+
+        .post-call-btn {
+            margin-top: 10px;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            background: var(--bg-color);
+            box-shadow: 3px 3px 6px var(--shadow-dark), -3px -3px 6px var(--shadow-light);
+            color: var(--text-color);
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+            pointer-events: auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+        }
+        
+        .post-call-btn:hover { color: var(--success-color); transform: translateY(-1px); }
+        .post-call-btn:active { box-shadow: inset 2px 2px 5px var(--shadow-dark), inset -2px -2px 5px var(--shadow-light); transform: translateY(1px); }
+        
+        /* Specific style for Copy Button */
+        .post-call-btn.copy-btn:hover { color: #4d96ff; }
+
+        /* Minimal Refresh Icon in Header */
+        .refresh-icon-btn {
+            cursor: pointer;
+            width: 24px; height: 24px;
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 50%;
+            transition: all 0.2s;
+            color: var(--text-color);
+            opacity: 0.6;
+        }
+        .refresh-icon-btn:hover { background: rgba(0,0,0,0.05); opacity: 1; color: var(--success-color); transform: rotate(180deg); }
+
+        /* Input area for Complaint Board */
+        .complaint-input-group {
+            display: flex;
+            gap: 5px;
+            margin-top: 10px;
+            pointer-events: auto;
+        }
+        
+        .complaint-input {
+            flex: 1;
+            border: none;
+            border-radius: 20px;
+            padding: 8px 12px;
+            background: rgba(0,0,0,0.02);
+            box-shadow: inset 2px 2px 5px rgba(0,0,0,0.15), inset -2px -2px 5px rgba(255,255,255,0.7);
+            color: var(--text-color);
+            font-family: inherit;
+            outline: none;
+            font-size: 0.85rem;
+        }
+        
+        .complaint-add-btn {
+            width: 32px; height: 32px;
+            border-radius: 50%;
+            border: none;
+            background: var(--bg-color);
+            box-shadow: 3px 3px 6px var(--shadow-dark), -3px -3px 6px var(--shadow-light);
+            color: var(--text-color);
+            font-weight: bold;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .complaint-add-btn:active { box-shadow: inset 2px 2px 5px var(--shadow-dark), inset -2px -2px 5px var(--shadow-light); }
+
+
+        /* --- Global Toolbar --- */
+        .toolbar {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-color);
+            padding: 10px 20px;
+            border-radius: 20px;
+            display: flex;
+            gap: 15px;
+            z-index: 1000;
+            box-shadow: 
+                6px 6px 12px var(--shadow-dark), 
+                -6px -6px 12px var(--shadow-light);
+        }
+
+        .tool-btn {
+            width: 40px; height: 40px;
+            border-radius: 50%;
+            border: none;
+            background: var(--bg-color);
+            color: var(--text-color);
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 3px 3px 6px var(--shadow-dark), -3px -3px 6px var(--shadow-light);
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .tool-btn:hover { color: var(--success-color); transform: translateY(-2px); }
+        .tool-btn:active { box-shadow: inset 2px 2px 5px var(--shadow-dark), inset -2px -2px 5px var(--shadow-light); transform: translateY(0); }
+        
+        .tool-tooltip {
+            position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%);
+            background: var(--text-color); color: var(--bg-color); padding: 4px 8px;
+            border-radius: 4px; font-size: 0.75rem; pointer-events: none; opacity: 0; transition: opacity 0.2s; white-space: nowrap;
+        }
+        .tool-btn:hover .tool-tooltip { opacity: 1; }
+
+        /* --- Help Modal --- */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(224, 229, 236, 0.8);
+            backdrop-filter: blur(2px);
+            z-index: 3000;
+            display: none;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-overlay.visible { display: flex; }
+        
+        .modal-card {
+            background: var(--bg-color);
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 8px 8px 16px var(--shadow-dark), -8px -8px 16px var(--shadow-light);
+            max-width: 400px;
+            color: var(--text-color);
+        }
+        
+        .modal-card h2 { margin-top: 0; }
+        .shortcut-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.9rem; border-bottom: 1px solid rgba(0,0,0,0.05); padding-bottom: 4px; }
+        .key-badge { background: #e0e5ec; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-weight: bold; border: 1px solid #a3b1c6; }
+
+        /* --- Context Menus --- */
+        .context-menu {
+            position: fixed; 
+            background: var(--bg-color);
+            padding: 8px;
+            border-radius: 12px;
+            box-shadow: 
+                5px 5px 10px var(--shadow-dark), 
+                -5px -5px 10px var(--shadow-light);
+            display: none;
+            z-index: 2000;
+            flex-direction: column;
+        }
+
+        .context-menu.visible {
+            display: flex;
+            animation: menuBounce 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        @keyframes menuBounce {
+            0% { opacity: 0; transform: scale(0.9); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+
+        /* Menu Dimensions */
+        .node-menu { width: 210px; overflow: visible; } 
+        .canvas-menu { min-width: 140px; }
+        .edge-menu { min-width: 280px; } 
+
+        .menu-item {
+            padding: 12px;
+            cursor: pointer;
+            color: var(--text-color);
+            transition: background 0.2s;
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+            font-size: 0.9rem;
+            font-weight: 600;
+            border-radius: 6px;
+            position: relative; 
+        }
+
+        .menu-item:hover { background-color: var(--menu-hover); }
+        .menu-item.danger { color: var(--danger-color); }
+        .menu-item.danger:hover { background-color: #ffeaea; }
+
+        /* Submenus */
+        .has-submenu::after {
+            content: '▶';
+            font-size: 0.7em;
+            margin-left: auto;
+            opacity: 0.6;
+        }
+
+        .submenu {
+            position: absolute;
+            left: 100%;
+            top: -8px;
+            margin-left: 10px;
+            background: var(--bg-color);
+            padding: 8px;
+            border-radius: 12px;
+            box-shadow: 5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
+            display: none;
+            flex-wrap: wrap;
+            width: 100px;
+            gap: 4px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        /* Bridge for hover */
+        .submenu::before {
+            content: '';
+            position: absolute;
+            top: 0; bottom: 0; left: -20px; width: 20px;
+            background: transparent;
+        }
+
+        .menu-item:hover .submenu {
+            display: flex;
+            opacity: 1;
+        }
+
+        .submenu .menu-item {
+            width: 40px;
+            height: 40px;
+            padding: 0;
+            justify-content: center;
+        }
+
+        /* Layout Helpers */
+        .menu-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; gap: 8px; }
+        
+        .menu-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 4px;
+            padding: 4px 8px;
+        }
+
+        .menu-label { font-size: 0.75rem; color: var(--text-color); opacity: 0.6; padding: 4px 12px 0 12px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: bold; }
+        .icon-only { padding: 8px; flex: 1; justify-content: center; }
+        .menu-separator { height: 1px; background: rgba(0,0,0,0.1); margin: 4px 10px; }
+        
+        .menu-icon { width: 20px; height: 20px; fill: none; stroke: var(--text-color); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; opacity: 0.7; }
+
+        .stepper-btn {
+            width: 24px; height: 24px;
+            background: var(--bg-color); border: 1px solid var(--text-color); border-radius: 4px;
+            display: flex; justify-content: center; align-items: center;
+            cursor: pointer; font-size: 14px; line-height: 1; opacity: 0.6; transition: all 0.2s;
+        }
+        .stepper-btn:hover { opacity: 1; background: var(--menu-hover); }
+        .stepper-val { font-weight: bold; width: 20px; text-align: center; }
+
+        /* Color Swatches */
+        .color-row { display: flex; justify-content: center; flex-wrap: wrap; padding: 8px; gap: 8px; }
+        .color-swatch {
+            width: 24px; height: 24px; border-radius: 50%; cursor: pointer;
+            border: 1px solid rgba(0,0,0,0.2); transition: transform 0.2s;
+            box-shadow: none; flex-shrink: 0;
+        }
+        .color-swatch:hover { transform: scale(1.15); border-color: var(--text-color); border-width: 2px; }
+
+        /* Custom Rainbow Swatch */
+        .color-swatch.custom {
+            background: conic-gradient(red, yellow, lime, aqua, blue, magenta, red);
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+        
+        .color-dot {
+            width: 14px; height: 14px; border-radius: 50%;
+            background: linear-gradient(135deg, #4d5b7c, #a3b1c6);
+            border: 1px solid rgba(0,0,0,0.2);
+            box-shadow: 1px 1px 2px var(--shadow-dark);
+        }
+
+        /* Inputs */
+        input[type="number"] {
+            width: 50px; padding: 6px; border-radius: 6px; border: 1px solid var(--input-border);
+            background: var(--input-bg); color: var(--text-color); font-family: inherit; font-weight: bold;
+            text-align: center; outline: none; box-shadow: inset 1px 1px 3px var(--shadow-dark), inset -1px -1px 3px var(--shadow-light);
+            -moz-appearance: textfield;
+        }
+        input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+        /* Sliders */
+        input[type="range"] {
+            -webkit-appearance: none; appearance: none; width: 100%; height: 6px;
+            background: var(--input-border); border-radius: 3px; outline: none; cursor: pointer;
+            box-shadow: inset 1px 1px 2px var(--shadow-dark); margin: 8px 0; display: block;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%;
+            background: var(--text-color); cursor: pointer; box-shadow: 2px 2px 4px var(--shadow-dark);
+            border: 2px solid var(--bg-color); margin-top: -6px; position: relative; top: 50%;
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 18px; height: 18px; border-radius: 50%; background: var(--text-color); cursor: pointer;
+            border: 2px solid var(--bg-color); box-shadow: 2px 2px 4px var(--shadow-dark);
+        }
+
+        /* Line Styles */
+        .line-preview { width: 100%; background-color: var(--text-color); border-radius: 2px; }
+        .style-dashed { background: repeating-linear-gradient(90deg, var(--text-color), var(--text-color) 4px, transparent 4px, transparent 8px); height: 2px; border: 1px dashed var(--text-color); border: none; }
+        .style-dotted { background: repeating-linear-gradient(90deg, var(--text-color), var(--text-color) 2px, transparent 2px, transparent 6px); height: 2px; border: 1px dotted var(--text-color); border: none; }
+
+        /* Text Format Menu */
+        .text-menu {
+            flex-direction: row;
+            flex-wrap: wrap;
+            gap: 4px;
+            padding: 8px;
+            width: 150px;
+            justify-content: center;
+        }
+        
+        .text-menu .menu-item {
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex: 0 0 auto;
+        }
+        
+        .text-menu .menu-icon { width: 16px; height: 16px; opacity: 0.8; }
+        .text-menu .separator {
+            width: 100%;
+            height: 1px;
+            background: rgba(0,0,0,0.1);
+            margin: 4px 0;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="viewport" id="viewport">
+        <div class="world" id="world">
+            <div class="grid-background"></div>
+            <svg class="edges-layer" id="edges-layer"></svg>
+            <!-- Nodes will be injected here -->
+        </div>
+    </div>
+
+    <!-- Global Toolbar -->
+    <div class="toolbar">
+        <button class="tool-btn" onclick="saveState()" title="Save">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+            <div class="tool-tooltip">Save (Local)</div>
+        </button>
+        <button class="tool-btn" onclick="loadState()" title="Load">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            <div class="tool-tooltip">Load (Local)</div>
+        </button>
+        <button class="tool-btn" onclick="clearCanvas()" title="Clear">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            <div class="tool-tooltip">Clear All</div>
+        </button>
+        <div style="width:1px; background:rgba(0,0,0,0.1); margin:0 5px;"></div>
+        <button class="tool-btn" onclick="resetView()" title="Reset View">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+            <div class="tool-tooltip">Reset View</div>
+        </button>
+        <button class="tool-btn" onclick="toggleHelp()" title="Help">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            <div class="tool-tooltip">Shortcuts</div>
+        </button>
+    </div>
+
+    <!-- Help Modal -->
+    <div id="help-modal" class="modal-overlay" onclick="toggleHelp()">
+        <div class="modal-card" onclick="event.stopPropagation()">
+            <h2>Controls</h2>
+            <div class="shortcut-row"><span>Pan Canvas</span> <span class="key-badge">Left Click + Drag</span></div>
+            <div class="shortcut-row"><span>Zoom</span> <span class="key-badge">Mouse Wheel</span></div>
+            <div class="shortcut-row"><span>Context Menu</span> <span class="key-badge">Right Click</span></div>
+            <div class="shortcut-row"><span>Move Node</span> <span class="key-badge">Left Click + Drag Node</span></div>
+            <div class="shortcut-row"><span>Add Text</span> <span class="key-badge">Double Click Background</span></div>
+            <div class="shortcut-row"><span>Rotate Node</span> <span class="key-badge">Left Click Node</span></div>
+            <div class="shortcut-row"><span>Delete Item</span> <span class="key-badge">Delete Key</span></div>
+            <br>
+            <div style="text-align:center; opacity:0.6; font-size:0.8rem;">Click anywhere to close</div>
+        </div>
+    </div>
+
+    <!-- Node Context Menu -->
+    <div id="node-menu" class="context-menu node-menu">
+        <div class="menu-item has-submenu">
+            <svg class="menu-icon" viewBox="0 0 24 24" style="margin-right:10px;"><path d="M12 2 L2 22 L22 22 Z" /></svg> Shapes
+            <div class="submenu">
+                <div class="menu-item" onclick="changeNodeShape('triangle')" title="Triangle"><svg class="menu-icon" viewBox="0 0 24 24"><path d="M12 4 L20 20 L4 20 Z" /></svg></div>
+                <div class="menu-item" onclick="changeNodeShape('circle')" title="Circle"><svg class="menu-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /></svg></div>
+                <div class="menu-item" onclick="changeNodeShape('rectangle')" title="Rectangle"><svg class="menu-icon" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="8" rx="1" /></svg></div>
+                <div class="menu-item" onclick="changeNodeShape('pill')" title="Pill"><svg class="menu-icon" viewBox="0 0 24 24"><rect x="2" y="8" width="20" height="8" rx="4" /></svg></div>
+                <div class="menu-item" onclick="changeNodeShape('pentagon')" title="Pentagon"><svg class="menu-icon" viewBox="0 0 24 24"><path d="M12 2 L22 9 L18 21 L6 21 L2 9 Z" /></svg></div>
+                <div class="menu-item" onclick="changeNodeShape('hexagon')" title="Hexagon"><svg class="menu-icon" viewBox="0 0 24 24"><path d="M12 2 L21 7 L21 17 L12 22 L3 17 L3 7 Z" /></svg></div>
+            </div>
+        </div>
+        
+        <div class="menu-separator"></div>
+        <div class="menu-label">Color</div>
+        <div class="color-row">
+            <div class="color-swatch" style="background-color: #e0e5ec;" onclick="changeNodeColor('#e0e5ec')" title="Default"></div>
+            <div class="color-swatch" style="background-color: #ff6b6b;" onclick="changeNodeColor('#ff6b6b')" title="Red"></div>
+            <div class="color-swatch" style="background-color: #4d96ff;" onclick="changeNodeColor('#4d96ff')" title="Blue"></div>
+            <div class="color-swatch" style="background-color: #6bcb77;" onclick="changeNodeColor('#6bcb77')" title="Green"></div>
+            <div class="color-swatch" style="background-color: #ffd93d;" onclick="changeNodeColor('#ffd93d')" title="Yellow"></div>
+            <div class="color-swatch" style="background-color: #9d4edd;" onclick="changeNodeColor('#9d4edd')" title="Purple"></div>
+            <!-- Custom Color Picker -->
+            <div class="color-swatch custom" onclick="document.getElementById('custom-node-color').click()" title="Custom Color"></div>
+            <input type="color" id="custom-node-color" style="display:none" oninput="changeNodeColor(this.value)">
+        </div>
+
+        <div class="menu-separator"></div>
+        <div class="menu-item" onclick="toggleNodeText()" id="text-toggle-item">
+            <svg class="menu-icon" viewBox="0 0 24 24" style="margin-right:10px;"><path d="M4 20 L20 20 M12 4 L12 20 M6 4 L18 4" stroke-width="2" stroke-linecap="round"/></svg> <span id="text-toggle-label">Add Label</span>
+        </div>
+        
+        <div class="menu-item" onclick="toggleNodeComplete()" id="complete-toggle-item">
+            <svg class="menu-icon" viewBox="0 0 24 24" style="margin-right:10px;"><path d="M20 6L9 17L4 12" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg> <span id="complete-toggle-label">Mark Complete</span>
+        </div>
+
+        <div class="menu-separator"></div>
+        <div class="menu-item" onclick="startConnection()" title="Connect">
+            <svg class="menu-icon" viewBox="0 0 24 24" style="margin-right:10px;"><path d="M4 12 L20 12 M20 12 L16 8 M20 12 L16 16" /></svg> Connect
+        </div>
+        
+        <div class="menu-item" style="justify-content: space-between; padding-right: 8px;">
+            <div style="display:flex; align-items:center; flex:1;" onclick="forkNode()">
+                <svg class="menu-icon" viewBox="0 0 24 24" style="margin-right:10px;"><path d="M6 3 L6 9 C6 12, 12 12, 12 15 L 12 21 M 18 3 L 18 9 C 18 12, 12 12, 12 15" /></svg> Fork
+            </div>
+            <div style="display:flex; align-items:center; gap:5px;" onclick="event.stopPropagation()">
+                <div class="stepper-btn" onclick="adjustForkCount(-1)">-</div>
+                <div id="fork-count-display" class="stepper-val">2</div>
+                <div class="stepper-btn" onclick="adjustForkCount(1)">+</div>
+            </div>
+        </div>
+
+        <div class="menu-separator"></div>
+        <div class="menu-item danger" onclick="deleteNode()">
+            <svg class="menu-icon" viewBox="0 0 24 24" style="margin-right:10px; stroke:var(--danger-color);"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            Delete Node
+        </div>
+    </div>
+
+    <!-- Edge Context Menu -->
+    <div id="edge-menu" class="context-menu edge-menu">
+        <div class="menu-label">Type</div>
+        <div class="menu-grid">
+            <div class="menu-item icon-only" onclick="changeEdgeType('straight')" title="Straight"><svg class="menu-icon" viewBox="0 0 24 24"><line x1="4" y1="20" x2="20" y2="4" /></svg></div>
+            <div class="menu-item icon-only" onclick="changeEdgeType('curved')" title="Curved"><svg class="menu-icon" viewBox="0 0 24 24"><path d="M4 20 C 12 20, 12 4, 20 4" /></svg></div>
+            <div class="menu-item icon-only" onclick="changeEdgeType('metro')" title="Metro (HVH)"><svg class="menu-icon" viewBox="0 0 24 24"><path d="M4 20 L 12 20 L 12 4 L 20 4" /></svg></div>
+            <div class="menu-item icon-only" onclick="changeEdgeType('manhattan')" title="Manhattan (VHV)"><svg class="menu-icon" viewBox="0 0 24 24"><path d="M4 20 L 4 12 L 20 12 L 20 4" /></svg></div>
+            <div class="menu-item icon-only" onclick="changeEdgeType('metro-curved')" title="Rounded Metro"><svg class="menu-icon" viewBox="0 0 24 24"><path d="M4 20 L 10 20 Q 12 20 12 18 L 12 6 Q 12 4 14 4 L 20 4" /></svg></div>
+            <div class="menu-item icon-only" onclick="changeEdgeType('circuit')" title="Circuit (Chamfer)"><svg class="menu-icon" viewBox="0 0 24 24"><path d="M4 20 L 10 20 L 12 18 L 12 6 L 14 4 L 20 4" /></svg></div>
+            <div class="menu-item icon-only" onclick="changeEdgeType('subway')" title="Subway (45 Deg)"><svg class="menu-icon" viewBox="0 0 24 24"><path d="M4 20 L 8 20 L 16 4 L 20 4" /></svg></div>
+        </div>
+        <div class="menu-separator"></div>
+        
+        <div class="menu-row" style="justify-content: space-between; padding-right: 12px;">
+             <span class="menu-label" style="padding:0;">Width (PX)</span>
+             <input type="number" id="width-input" min="1" max="50" oninput="updateWidthFromInput(this.value)">
+        </div>
+        <div class="menu-row" style="padding-top: 0;">
+            <input type="range" id="width-slider" min="1" max="50" oninput="updateWidthFromSlider(this.value)">
+        </div>
+
+        <div class="menu-separator"></div>
+
+        <div class="menu-row" style="justify-content: space-between; padding-right: 12px;">
+             <span class="menu-label" style="padding:0;">Spacing</span>
+             <input type="number" id="spacing-input" min="1" max="20" value="3" oninput="updateSpacingFromInput(this.value)">
+        </div>
+        <div class="menu-row" style="padding-top: 0;">
+            <input type="range" id="spacing-slider" min="1" max="20" value="3" oninput="updateSpacingFromSlider(this.value)">
+        </div>
+
+        <div class="menu-separator"></div>
+        <div class="menu-label">Style</div>
+        <div class="menu-row">
+            <div class="menu-item icon-only" onclick="changeEdgeStyle('solid')" title="Solid"><div class="line-preview" style="height:2px"></div></div>
+            <div class="menu-item icon-only" onclick="changeEdgeStyle('dashed')" title="Dashed"><div class="line-preview style-dashed"></div></div>
+            <div class="menu-item icon-only" onclick="changeEdgeStyle('dotted')" title="Dotted"><div class="line-preview style-dotted"></div></div>
+        </div>
+
+        <div class="menu-separator"></div>
+        <div class="menu-label">Color</div>
+        <div class="color-row">
+            <div class="color-swatch" style="background-color: #a3b1c6;" onclick="changeEdgeColor('#a3b1c6')" title="Default"></div>
+            <div class="color-swatch" style="background-color: #ff6b6b;" onclick="changeEdgeColor('#ff6b6b')" title="Red"></div>
+            <div class="color-swatch" style="background-color: #4d96ff;" onclick="changeEdgeColor('#4d96ff')" title="Blue"></div>
+            <div class="color-swatch" style="background-color: #6bcb77;" onclick="changeEdgeColor('#6bcb77')" title="Green"></div>
+            <div class="color-swatch" style="background-color: #ffd93d;" onclick="changeEdgeColor('#ffd93d')" title="Yellow"></div>
+            <div class="color-swatch" style="background-color: #9d4edd;" onclick="changeEdgeColor('#9d4edd')" title="Purple"></div>
+            <!-- Custom Color Picker -->
+            <div class="color-swatch custom" onclick="document.getElementById('custom-edge-color').click()" title="Custom Color"></div>
+            <input type="color" id="custom-edge-color" style="display:none" oninput="changeEdgeColor(this.value)">
+        </div>
+
+        <div class="menu-separator"></div>
+        <div class="menu-item danger" onclick="deleteEdge()">Delete Line</div>
+    </div>
+
+    <!-- Canvas Context Menu -->
+    <div id="canvas-menu" class="context-menu canvas-menu">
+        <div class="menu-item" onclick="addNodeAtCursor()">
+            + Add Shape Node
+        </div>
+        <div class="menu-separator"></div>
+        <div class="menu-item" onclick="addPostCallWorkNodeAtCursor()">
+            ★ Add Post Call Work
+        </div>
+        <div class="menu-item" onclick="addComplaintBoardNodeAtCursor()">
+            ⚠ Add Complaint Board
+        </div>
+        <div class="menu-separator"></div>
+        <div class="menu-item danger" onclick="deleteNode(activeNodeId)">
+            Delete Selected
+        </div>
+    </div>
+
+    <!-- Text Formatting Menu -->
+    <div id="text-menu" class="context-menu text-menu">
+        <div class="menu-item icon-only" onmousedown="formatText('bold'); event.preventDefault();" title="Bold"><span style="font-weight:900">B</span></div>
+        <div class="menu-item icon-only" onmousedown="formatText('italic'); event.preventDefault();" title="Italic"><span style="font-style:italic">I</span></div>
+        <div class="menu-item icon-only" onmousedown="formatText('underline'); event.preventDefault();" title="Underline"><span style="text-decoration:underline">U</span></div>
+        
+        <div class="menu-item icon-only" onmousedown="document.getElementById('text-color-picker').click(); event.preventDefault();" title="Text Color">
+            <div class="color-dot"></div>
+            <input type="color" id="text-color-picker" style="display:none" oninput="formatText('foreColor', this.value)">
+        </div>
+
+        <div class="separator"></div>
+
+        <div class="menu-item icon-only" onmousedown="formatText('justifyLeft'); event.preventDefault();" title="Align Left">
+            <svg class="menu-icon" viewBox="0 0 24 24"><path d="M3 6h18M3 12h12M3 18h18" /></svg>
+        </div>
+        <div class="menu-item icon-only" onmousedown="formatText('justifyCenter'); event.preventDefault();" title="Align Center">
+             <svg class="menu-icon" viewBox="0 0 24 24"><path d="M3 6h18M6 12h12M3 18h18" /></svg>
+        </div>
+        <div class="menu-item icon-only" onmousedown="formatText('justifyRight'); event.preventDefault();" title="Align Right">
+             <svg class="menu-icon" viewBox="0 0 24 24"><path d="M3 6h18M9 12h12M3 18h18" /></svg>
+        </div>
+
+        <div class="separator"></div>
+
+        <div class="menu-item icon-only" onmousedown="formatText('insertUnorderedList'); event.preventDefault();" title="Bullet List">
+             <svg class="menu-icon" viewBox="0 0 24 24"><path d="M4 6h2v2H4zm0 5h2v2H4zm0 5h2v2H4zM8 6h12v2H8zm0 5h12v2H8zm0 5h12v2H8z" /></svg>
+        </div>
+    </div>
+
+    <script>
+        const viewport = document.getElementById('viewport');
+        const world = document.getElementById('world');
+        const edgesLayer = document.getElementById('edges-layer');
+        const nodeMenu = document.getElementById('node-menu');
+        const canvasMenu = document.getElementById('canvas-menu');
+        const edgeMenu = document.getElementById('edge-menu');
+        const textMenu = document.getElementById('text-menu');
+        const helpModal = document.getElementById('help-modal');
+        
+        const widthInput = document.getElementById('width-input');
+        const widthSlider = document.getElementById('width-slider');
+        const spacingInput = document.getElementById('spacing-input');
+        const spacingSlider = document.getElementById('spacing-slider');
+        
+        // --- State ---
+        let view = { x: window.innerWidth / 2, y: window.innerHeight / 2, zoom: 1 };
+        let isDraggingCanvas = false;
+        let isDraggingNode = false;
+        let activeNodeId = null;
+        let hoverNodeId = null; 
+        let hoverEdgeId = null;
+        let activeTextNodeId = null;
+        let lastMouse = { x: 0, y: 0 };
+        let contextMenuPos = { x: 0, y: 0 }; 
+        let nextNodeId = 1;
+        let nextEdgeId = 1;
+
+        let connectionMode = { active: false, sourceId: null, tempLine: null };
+        let edges = [];
+        let forkCount = 2;
+
+        // Shape Configurations
+        const CONFIG = {
+            triangle: { p: [{x:100,y:25}, {x:165,y:137.5}, {x:35,y:137.5}, {x:35,y:137.5}, {x:35,y:137.5}, {x:100,y:25}], stroke: 35 },
+            circle: { p: [{x:100,y:100}, {x:100,y:100}, {x:100,y:100}, {x:100,y:100}, {x:100,y:100}, {x:100,y:100}], stroke: 170 },
+            rectangle: { p: [{x:20,y:55}, {x:180,y:55}, {x:180,y:145}, {x:20,y:145}, {x:20,y:145}, {x:20,y:55}], stroke: 35 },
+            pill: { p: [{x:50,y:100}, {x:150,y:100}, {x:150,y:100}, {x:150,y:100}, {x:50,y:100}, {x:50,y:100}], stroke: 80 },
+            pentagon: { p: [{x:100,y:20}, {x:180,y:80}, {x:150,y:170}, {x:50,y:170}, {x:20,y:80}, {x:100,y:20}], stroke: 25 },
+            hexagon: { p: [{x:100,y:20}, {x:170,y:60}, {x:170,y:140}, {x:100,y:180}, {x:30,y:140}, {x:30,y:60}], stroke: 25 }
+        };
+
+        function init() {
+            // Try load
+            if(!loadState()) {
+                createNode(0, 0, 'triangle');
+            }
+            updateWorldTransform();
+        }
+
+        // --- Persistence ---
+
+        function saveState() {
+            const nodesData = [];
+            document.querySelectorAll('.node-wrapper').forEach(n => {
+                let color = null;
+                const path = n.querySelector('path');
+                if (path) color = path.style.fill;
+
+                // Special handling for lists content
+                let customContent = null;
+                const listEl = n.querySelector('.post-call-list');
+                if (listEl) customContent = listEl.innerHTML;
+
+                nodesData.push({
+                    id: n.id,
+                    left: n.style.left,
+                    top: n.style.top,
+                    width: n.style.width,
+                    height: n.style.height,
+                    type: n.dataset.type,
+                    rotation: n.dataset.rotation,
+                    scale: n.dataset.scale,
+                    text: n.querySelector('.node-text') ? n.querySelector('.node-text').innerHTML : "",
+                    completed: n.classList.contains('completed'),
+                    color: color,
+                    customContent: customContent // Save list content
+                });
+            });
+
+            const state = {
+                nodes: nodesData,
+                edges: edges,
+                nextNodeId: nextNodeId,
+                nextEdgeId: nextEdgeId,
+                view: view
+            };
+            
+            localStorage.setItem('neumorphic_canvas_state', JSON.stringify(state));
+            
+            // Visual feedback
+            const btn = document.querySelector('button[title="Save"]');
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = `<span style="color:var(--success-color)">✓</span>`;
+            setTimeout(() => btn.innerHTML = originalHtml, 1000);
+        }
+
+        function loadState() {
+            const data = localStorage.getItem('neumorphic_canvas_state');
+            if(!data) return false;
+            
+            const state = JSON.parse(data);
+            
+            // Clear current
+            clearCanvas(false); 
+
+            // Restore View
+            view = state.view || { x: window.innerWidth / 2, y: window.innerHeight / 2, zoom: 1 };
+            nextNodeId = state.nextNodeId || 1;
+            nextEdgeId = state.nextEdgeId || 1;
+
+            // Restore Nodes
+            state.nodes.forEach(n => {
+                const wrapper = createNode(parseFloat(n.left), parseFloat(n.top), n.type, n.id);
+                wrapper.dataset.rotation = n.rotation;
+                wrapper.dataset.scale = n.scale;
+                
+                if(n.width) { wrapper.style.width = n.width; wrapper.style.height = n.height; }
+                if(n.completed) wrapper.classList.add('completed');
+                
+                const textEl = wrapper.querySelector('.node-text');
+                if(textEl) {
+                    textEl.innerHTML = n.text;
+                    if(n.text.trim() !== '') textEl.classList.add('visible');
+                }
+
+                // Restore Color if regular shape node
+                if(n.type !== 'text' && n.type !== 'post-call' && n.type !== 'complaint-board' && n.color) {
+                    const path = wrapper.querySelector('path');
+                    if(path) { path.style.fill = n.color; path.style.stroke = n.color; }
+                }
+                
+                // Restore Custom List Content
+                if (n.customContent && n.type === 'complaint-board') {
+                    // Only restore content for complaint boards directly
+                    // Post-call nodes will auto-regenerate via triggerAutoUpdate
+                    const listEl = wrapper.querySelector('.post-call-list');
+                    if(listEl) listEl.innerHTML = n.customContent;
+                }
+                
+                updateNodeTransform(wrapper);
+                
+                // For text nodes, auto-fit might be needed if font loaded differently, but usually fine
+                if(n.type === 'text') fitNodeToText(wrapper);
+            });
+
+            // Restore Edges
+            state.edges.forEach(eData => {
+                // We need to re-create the DOM element for the edge
+                const sourceNode = document.getElementById(eData.source);
+                const targetNode = document.getElementById(eData.target);
+                if(sourceNode && targetNode) {
+                    const line = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                    line.classList.add('connection-line');
+                    line.id = eData.id;
+                    line.setAttribute('d', getEdgePathD(parseFloat(sourceNode.style.left), parseFloat(sourceNode.style.top), parseFloat(targetNode.style.left), parseFloat(targetNode.style.top), eData.type));
+                    line.addEventListener('contextmenu', (e) => showEdgeMenu(e, eData.id));
+                    // Mouse listeners for hover tracking
+                    line.addEventListener('mouseenter', () => hoverEdgeId = eData.id);
+                    line.addEventListener('mouseleave', () => hoverEdgeId = null);
+                    
+                    edgesLayer.insertBefore(line, edgesLayer.firstChild);
+                    
+                    // Re-attach element to data object
+                    eData.element = line;
+                    edges.push(eData);
+                    updateEdgeAppearance(eData);
+                }
+            });
+
+            return true;
+        }
+
+        function clearCanvas(save=true) {
+            // Remove Nodes
+            const nodes = document.querySelectorAll('.node-wrapper');
+            nodes.forEach(n => n.remove());
+            
+            // Remove Edges
+            edges.forEach(e => e.element.remove());
+            edges = [];
+            
+            // Reset IDs if fully clearing
+            if(save) {
+                nextNodeId = 1;
+                nextEdgeId = 1;
+                saveState(); // Save empty state
+            }
+        }
+
+        function resetView() {
+            view = { x: window.innerWidth / 2, y: window.innerHeight / 2, zoom: 1 };
+            updateWorldTransform();
+        }
+
+        function toggleHelp() {
+            helpModal.classList.toggle('visible');
+        }
+
+        // --- Node Logic ---
+
+        function createNode(x, y, type, forceId = null) {
+            const id = forceId ? forceId : `node-${nextNodeId++}`;
+            const wrapper = document.createElement('div');
+            wrapper.className = 'node-wrapper';
+            wrapper.id = id;
+            wrapper.style.left = `${x}px`;
+            wrapper.style.top = `${y}px`;
+            wrapper.dataset.type = type;
+            wrapper.dataset.rotation = 0;
+            wrapper.dataset.scale = 1;
+            
+            let innerContent = '';
+            
+            if (type === 'text') {
+                // Text-only node
+                innerContent = `<div class="node-text visible" contenteditable="true" spellcheck="false">Type here...</div>`;
+            } else if (type === 'post-call') {
+                // Post Call Work Node
+                innerContent = `
+                    <div class="post-call-wrapper">
+                        <div class="post-call-header">
+                            <span>Post Call Work</span>
+                            <div class="refresh-icon-btn" onclick="collectCompletedWork('${id}')" title="Force Refresh">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                            </div>
+                        </div>
+                        <div class="post-call-list" id="list-${id}">
+                            <div style="text-align:center; opacity:0.5; padding:20px;">Waiting for data...</div>
+                        </div>
+                        <button class="post-call-btn copy-btn" id="copy-btn-${id}" onclick="copyPostCallData('${id}')">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            Copy Data
+                        </button>
+                    </div>
+                `;
+            } else if (type === 'complaint-board') {
+                // Complaint Board Node
+                innerContent = `
+                    <div class="post-call-wrapper">
+                        <div class="post-call-header" style="color:var(--danger-color)">
+                            <span>Complaint Board</span>
+                            <span>⚠</span>
+                        </div>
+                        <div class="post-call-list" id="list-${id}"></div>
+                        <div class="complaint-input-group">
+                            <input type="text" class="complaint-input" placeholder="Type complaint..." id="input-${id}" onkeydown="if(event.key==='Enter') addComplaint('${id}')">
+                            <button class="complaint-add-btn" onclick="addComplaint('${id}')">+</button>
+                        </div>
+                    </div>
+                `;
+            } else {
+                // Shape node
+                innerContent = `
+                    <svg viewBox="0 0 200 200" preserveAspectRatio="none" width="100%" height="100%" style="overflow:visible"><path d="${getDString(CONFIG[type])}" stroke-width="${CONFIG[type].stroke}" /></svg>
+                    <div class="node-text" contenteditable="true" spellcheck="false"></div>
+                    <div class="status-badge">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    </div>
+                `;
+            }
+            wrapper.innerHTML = innerContent;
+            
+            wrapper.addEventListener('mousedown', handleNodeMouseDown);
+            wrapper.addEventListener('mouseenter', (e) => {
+                animateNodeHover(e.currentTarget, true);
+                hoverNodeId = id;
+            });
+            wrapper.addEventListener('mouseleave', (e) => {
+                animateNodeHover(e.currentTarget, false);
+                hoverNodeId = null;
+            });
+            wrapper.addEventListener('contextmenu', (e) => showNodeMenu(e, id));
+            
+            // Text Node Interaction: Double click to edit
+            if (type === 'text') {
+                wrapper.addEventListener('dblclick', (e) => {
+                    e.stopPropagation();
+                    enableTextEditing(id);
+                });
+            }
+            
+            // Text Auto-Sizing & Menu Logic (Only for standard shape nodes)
+            const textEl = wrapper.querySelector('.node-text');
+            if (textEl && type !== 'text') {
+                textEl.addEventListener('input', () => {
+                    fitNodeToText(wrapper);
+                    updateTextMenuPos();
+                });
+                textEl.addEventListener('focus', (e) => {
+                    activeTextNodeId = id;
+                    updateTextMenuPos();
+                    textMenu.classList.add('visible');
+                });
+                textEl.addEventListener('blur', () => {
+                    textMenu.classList.remove('visible');
+                    activeTextNodeId = null;
+                    // Remove editing state for text nodes
+                    wrapper.classList.remove('editing');
+                    saveState(); 
+                    triggerAutoUpdate(); // Auto update post call on text change
+                });
+                textEl.addEventListener('keyup', updateTextMenuPos);
+            }
+            
+            world.appendChild(wrapper);
+            if(type === 'text') fitNodeToText(wrapper);
+            if(!forceId) saveState(); 
+            // If creating a post call node, populate it immediately
+            if(type === 'post-call') setTimeout(() => collectCompletedWork(id), 100);
+            return wrapper;
+        }
+
+        function addPostCallWorkNodeAtCursor() {
+            const wrapper = createNode(contextMenuPos.x, contextMenuPos.y, 'post-call');
+            hideMenus();
+        }
+
+        function addComplaintBoardNodeAtCursor() {
+            const wrapper = createNode(contextMenuPos.x, contextMenuPos.y, 'complaint-board');
+            hideMenus();
+        }
+
+        // Trigger updates for ALL post call nodes
+        function triggerAutoUpdate() {
+            const postCallNodes = document.querySelectorAll('.node-wrapper[data-type="post-call"]');
+            postCallNodes.forEach(node => collectCompletedWork(node.id));
+        }
+
+        // Logic to add item to complaint board
+        function addComplaint(nodeId) {
+            const input = document.getElementById(`input-${nodeId}`);
+            const list = document.getElementById(`list-${nodeId}`);
+            const text = input.value.trim();
+            if(!text) return;
+
+            const item = document.createElement('div');
+            item.className = 'post-call-item complaint-source';
+            item.innerHTML = `
+                <div>${text}</div>
+                <div class="item-delete-btn" onclick="deleteComplaintItem(this)">×</div>
+            `;
+            list.appendChild(item);
+            input.value = '';
+            list.scrollTop = list.scrollHeight;
+            saveState();
+            triggerAutoUpdate(); // Update listeners
+        }
+
+        function deleteComplaintItem(btn) {
+            btn.parentElement.remove();
+            saveState();
+            triggerAutoUpdate(); // Update listeners
+        }
+
+        function copyPostCallData(nodeId) {
+            const listContainer = document.getElementById(`list-${nodeId}`);
+            if (!listContainer) return;
+
+            const items = listContainer.querySelectorAll('.post-call-item');
+            if (items.length === 0) return;
+
+            let clipboardText = "POST CALL WORK SUMMARY:\n\n";
+
+            items.forEach(item => {
+                // Get the title (node source)
+                const titleEl = item.querySelector('small');
+                let title = titleEl ? titleEl.innerText : "Unknown Source";
+                
+                // Get the content div
+                const contentDiv = item.querySelector('div:not(:first-child)'); // Skip small, get div
+                // If the structure is strictly small + div, we can select the div directly
+                // Note: The delete button is also a div in complaint items inside the board, 
+                // but in post-call aggregation, we stripped the delete button.
+                
+                // However, let's grab the raw text logic safely
+                let contentText = "";
+                
+                // Check if it's a UL list (from complaint board)
+                const ul = item.querySelector('ul');
+                if (ul) {
+                    const lis = ul.querySelectorAll('li');
+                    lis.forEach(li => {
+                        contentText += `- ${li.innerText}\n`;
+                    });
+                } else {
+                    // Standard text
+                    // We need to be careful not to grab the title text again if using innerText on parent
+                    // Let's grab the specific content node we created in createPostCallItem
+                    const div = item.querySelector('div');
+                    if(div) contentText = div.innerText;
+                }
+
+                clipboardText += `${title}:\n${contentText}\n\n`;
+            });
+
+            // Copy to clipboard using textarea hack for reliability in iframes
+            const ta = document.createElement('textarea');
+            ta.value = clipboardText;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+
+            // Visual Feedback
+            const btn = document.getElementById(`copy-btn-${nodeId}`);
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = `<span style="color:var(--success-color)">✓ Copied!</span>`;
+            setTimeout(() => {
+                btn.innerHTML = originalHtml;
+            }, 1500);
+        }
+
+        function collectCompletedWork(nodeId) {
+            const listContainer = document.getElementById(`list-${nodeId}`);
+            if(!listContainer) return;
+            
+            listContainer.innerHTML = '';
+            
+            const nodes = document.querySelectorAll('.node-wrapper');
+            let foundCount = 0;
+            
+            nodes.forEach(n => {
+                if (n.id === nodeId) return; // Skip self
+
+                // 1. Check for Completed Shape Nodes
+                if (n.classList.contains('completed')) {
+                    const textEl = n.querySelector('.node-text');
+                    if (textEl && textEl.innerText.trim().length > 0) {
+                        foundCount++;
+                        createPostCallItem(listContainer, n.dataset.type, n.id, textEl.innerText, 'var(--success-color)');
+                    }
+                }
+
+                // 2. Check for Complaint Board Nodes
+                if (n.dataset.type === 'complaint-board') {
+                    // Find all items inside the complaint list
+                    const complaints = n.querySelectorAll('.post-call-item div:first-child');
+                    
+                    if(complaints.length > 0) {
+                        foundCount++;
+                        // Build list of complaint texts
+                        let htmlContent = '<ul style="margin:0; padding-left:20px;">';
+                        complaints.forEach(c => {
+                            htmlContent += `<li>${c.innerText}</li>`;
+                        });
+                        htmlContent += '</ul>';
+                        
+                        // Create grouped item
+                        createPostCallItem(listContainer, 'Complaint Board', n.id, htmlContent, 'var(--danger-color)');
+                    }
+                }
+            });
+            
+            if (foundCount === 0) {
+                listContainer.innerHTML = '<div style="text-align:center; opacity:0.5; padding:20px;">No data found.<br><br>Mark shapes as Complete (✓) or add items to Complaint Boards.</div>';
+            }
+            // Note: We don't save state here to avoid infinite loops or saving derived data unnecessarily
+        }
+
+        function createPostCallItem(container, type, id, content, color) {
+            const item = document.createElement('div');
+            item.className = 'post-call-item';
+            item.style.borderLeftColor = color;
+            
+            // Format Title nicely
+            let typeLabel = type;
+            // Clean up basic shapes
+            if (['triangle','circle','rectangle','pill','pentagon','hexagon'].includes(type)) {
+                typeLabel = type.charAt(0).toUpperCase() + type.slice(1);
+            }
+            
+            item.innerHTML = `
+                <small style="color:${color}; font-weight:bold;">${typeLabel} #${id.split('-')[1]}</small>
+                <div>${content}</div>
+            `;
+            container.appendChild(item);
+        }
+
+        function enableTextEditing(nodeId) {
+            const wrapper = document.getElementById(nodeId);
+            const textEl = wrapper.querySelector('.node-text');
+            wrapper.classList.add('editing');
+            textEl.focus();
+            
+            // Move cursor to end
+            const range = document.createRange();
+            const sel = window.getSelection();
+            range.selectNodeContents(textEl);
+            range.collapse(false);
+            sel.removeAllRanges();
+            sel.addRange(range);
+        }
+
+        function fitNodeToText(wrapper) {
+            const textEl = wrapper.querySelector('.node-text');
+            if (!textEl) return; 
+
+            const type = wrapper.dataset.type;
+            const minSize = 200;
+            
+            const contentWidth = textEl.scrollWidth;
+            const contentHeight = textEl.scrollHeight;
+            
+            if (type === 'text' || type === 'post-call' || type === 'complaint-board') {
+                return; 
+            }
+            
+            const padding = 60; 
+            
+            let sizeMultiplier = 1.0;
+            if (type === 'circle') sizeMultiplier = 1.5;
+            else if (type === 'triangle') sizeMultiplier = 2.4; 
+            else if (type === 'pentagon' || type === 'hexagon') sizeMultiplier = 1.6;
+            
+            let requiredWidth = contentWidth + padding;
+            let requiredHeight = contentHeight + padding;
+
+            if (['circle', 'triangle', 'pentagon', 'hexagon'].includes(type)) {
+                const maxTextDim = Math.max(requiredWidth, requiredHeight);
+                const requiredShapeSize = maxTextDim * sizeMultiplier;
+                const finalSize = Math.max(minSize, requiredShapeSize);
+                wrapper.style.width = `${finalSize}px`;
+                wrapper.style.height = `${finalSize}px`;
+            } else {
+                const finalWidth = Math.max(minSize, requiredWidth);
+                const finalHeight = Math.max(minSize, requiredHeight);
+                wrapper.style.width = `${finalWidth}px`;
+                wrapper.style.height = `${finalHeight}px`;
+            }
+        }
+
+        function getDString(config) {
+            let d = `M ${config.p[0].x} ${config.p[0].y} `;
+            for(let i=1; i<6; i++) {
+                d += `L ${config.p[i].x} ${config.p[i].y} `;
+            }
+            d += "Z";
+            return d;
+        }
+
+        // --- Edge Logic ---
+
+        function getEdgePathD(x1, y1, x2, y2, type) {
+            if (type === 'straight') {
+                return `M ${x1} ${y1} L ${x2} ${y2}`;
+            } else if (type === 'curved') {
+                const midX = (x1 + x2) / 2;
+                return `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`;
+            } else if (type === 'metro') {
+                const midX = (x1 + x2) / 2;
+                return `M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}`;
+            } else if (type === 'manhattan') {
+                const midY = (y1 + y2) / 2;
+                return `M ${x1} ${y1} L ${x1} ${midY} L ${x2} ${midY} L ${x2} ${y2}`;
+            } else if (type === 'metro-curved') {
+                const midX = (x1 + x2) / 2;
+                const r = Math.min(20, Math.abs(midX - x1), Math.abs(y2 - y1) / 2, Math.abs(x2 - midX));
+                if (r < 2) return `M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}`;
+                const dx1 = (midX - x1) >= 0 ? 1 : -1;
+                const dy = (y2 - y1) >= 0 ? 1 : -1;
+                const dx2 = (x2 - midX) >= 0 ? 1 : -1;
+                return `M ${x1} ${y1} L ${midX - r * dx1} ${y1} Q ${midX} ${y1} ${midX} ${y1 + r * dy} L ${midX} ${y2 - r * dy} Q ${midX} ${y2} ${midX + r * dx2} ${y2} L ${x2} ${y2}`;
+            } else if (type === 'circuit') {
+                const midX = (x1 + x2) / 2;
+                const r = Math.min(20, Math.abs(midX - x1), Math.abs(y2 - y1) / 2, Math.abs(x2 - midX));
+                if (r < 2) return `M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}`;
+                const dx1 = (midX - x1) >= 0 ? 1 : -1;
+                const dy = (y2 - y1) >= 0 ? 1 : -1;
+                const dx2 = (x2 - midX) >= 0 ? 1 : -1;
+                return `M ${x1} ${y1} L ${midX - r * dx1} ${y1} L ${midX} ${y1 + r * dy} L ${midX} ${y2 - r * dy} L ${midX + r * dx2} ${y2} L ${x2} ${y2}`;
+            } else if (type === 'subway') {
+                const dx = x2 - x1;
+                const dy = y2 - y1;
+                const signDx = dx >= 0 ? 1 : -1;
+                const signDy = dy >= 0 ? 1 : -1;
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    const diagSpanX = Math.abs(dy);
+                    const straightSpanX = Math.abs(dx) - diagSpanX;
+                    const xTurn1 = x1 + (signDx * (straightSpanX / 2));
+                    const xTurn2 = x2 - (signDx * (straightSpanX / 2));
+                    return `M ${x1} ${y1} L ${xTurn1} ${y1} L ${xTurn2} ${y2} L ${x2} ${y2}`;
+                } else {
+                    const diagSpanY = Math.abs(dx);
+                    const straightSpanY = Math.abs(dy) - diagSpanY;
+                    const yTurn1 = y1 + (signDy * (straightSpanY / 2));
+                    const yTurn2 = y2 - (signDy * (straightSpanY / 2));
+                    return `M ${x1} ${y1} L ${x1} ${yTurn1} L ${x2} ${yTurn2} L ${x2} ${y2}`;
+                }
+            }
+            return `M ${x1} ${y1} L ${x2} ${y2}`;
+        }
+
+        function updateEdgePositions(nodeId) {
+            const connectedEdges = edges.filter(e => e.source === nodeId || e.target === nodeId);
+            connectedEdges.forEach(edge => {
+                const s = document.getElementById(edge.source);
+                const t = document.getElementById(edge.target);
+                // If node deleted, skip
+                if(!s || !t) return;
+                
+                const x1 = parseFloat(s.style.left); const y1 = parseFloat(s.style.top);
+                const x2 = parseFloat(t.style.left); const y2 = parseFloat(t.style.top);
+                edge.element.setAttribute('d', getEdgePathD(x1, y1, x2, y2, edge.type));
+            });
+        }
+
+        function updateEdgeAppearance(edge) {
+            edge.element.setAttribute('stroke-width', edge.width);
+            if (edge.color) edge.element.style.stroke = edge.color;
+            else edge.element.style.stroke = '';
+
+            if (edge.style === 'solid') {
+                edge.element.removeAttribute('stroke-dasharray');
+                edge.element.setAttribute('stroke-linecap', 'round');
+            } else if (edge.style === 'dashed') {
+                const dashLen = edge.width * edge.spacing;
+                edge.element.setAttribute('stroke-dasharray', `${dashLen}, ${dashLen}`);
+                edge.element.setAttribute('stroke-linecap', 'butt');
+            } else if (edge.style === 'dotted') {
+                const gapLen = edge.width * edge.spacing;
+                edge.element.setAttribute('stroke-dasharray', `0, ${gapLen}`);
+                edge.element.setAttribute('stroke-linecap', 'round');
+            }
+        }
+
+        function createEdge(sourceId, targetId, type='straight') {
+            const eid = `edge-${nextEdgeId++}`;
+            const sourceNode = document.getElementById(sourceId);
+            const targetNode = document.getElementById(targetId);
+            const line = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            line.classList.add('connection-line');
+            line.id = eid;
+            
+            const x1 = parseFloat(sourceNode.style.left); const y1 = parseFloat(sourceNode.style.top);
+            const x2 = parseFloat(targetNode.style.left); const y2 = parseFloat(targetNode.style.top);
+            
+            const defaultWidth = 6;
+            line.setAttribute('d', getEdgePathD(x1, y1, x2, y2, type));
+            line.setAttribute('stroke-width', defaultWidth);
+            line.addEventListener('contextmenu', (e) => showEdgeMenu(e, eid));
+            line.addEventListener('mouseenter', () => hoverEdgeId = eid);
+            line.addEventListener('mouseleave', () => hoverEdgeId = null);
+            
+            edgesLayer.insertBefore(line, edgesLayer.firstChild);
+            
+            const edgeData = { id: eid, source: sourceId, target: targetId, element: line, width: defaultWidth, spacing: 3, style: 'solid', type: type, color: null };
+            edges.push(edgeData);
+            updateEdgeAppearance(edgeData);
+            saveState(); // Auto save
+        }
+
+        // --- Interaction Handlers ---
+
+        viewport.addEventListener('mousedown', (e) => {
+            if (connectionMode.active) { cancelConnection(); return; }
+            if (e.target.closest('.node-wrapper')) return; 
+            if (e.target.closest('.tool-btn')) return; // Don't drag on tool click
+            if (e.button !== 0) return; 
+            isDraggingCanvas = true;
+            lastMouse = { x: e.clientX, y: e.clientY };
+            viewport.classList.add('panning');
+            hideMenus();
+        });
+
+        viewport.addEventListener('dblclick', (e) => {
+            if (e.target.closest('.node-wrapper') || e.target.closest('.tool-btn') || e.target.closest('.context-menu')) return;
+            e.preventDefault();
+            
+            const wMx = (e.clientX - view.x) / view.zoom;
+            const wMy = (e.clientY - view.y) / view.zoom;
+            
+            // Create a text-only node
+            const wrapper = createNode(wMx, wMy, 'text');
+            
+            // Activate text edit mode immediately
+            enableTextEditing(wrapper.id);
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            const dx = e.clientX - lastMouse.x;
+            const dy = e.clientY - lastMouse.y;
+            lastMouse = { x: e.clientX, y: e.clientY };
+
+            if (isDraggingCanvas) {
+                view.x += dx; view.y += dy;
+                updateWorldTransform();
+            } else if (isDraggingNode && activeNodeId) {
+                const node = document.getElementById(activeNodeId);
+                const wDx = dx / view.zoom; const wDy = dy / view.zoom;
+                node.style.left = `${parseFloat(node.style.left) + wDx}px`;
+                node.style.top = `${parseFloat(node.style.top) + wDy}px`;
+                updateEdgePositions(activeNodeId);
+                node.dataset.hasDragged = "true";
+            } else if (connectionMode.active && connectionMode.tempLine) {
+                const wMx = (e.clientX - view.x) / view.zoom;
+                const wMy = (e.clientY - view.y) / view.zoom;
+                const x1 = parseFloat(connectionMode.tempLine.dataset.x1);
+                const y1 = parseFloat(connectionMode.tempLine.dataset.y1);
+                connectionMode.tempLine.setAttribute('d', `M ${x1} ${y1} L ${wMx} ${wMy}`);
+            }
+        });
+
+        window.addEventListener('mouseup', () => {
+            if(isDraggingNode) saveState(); // Save after drag
+            isDraggingCanvas = false; isDraggingNode = false; activeNodeId = null;
+            viewport.classList.remove('panning');
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                if (activeTextNodeId) return; // Don't delete if editing text
+                
+                if (hoverNodeId) {
+                    deleteNode(hoverNodeId);
+                } else if (hoverEdgeId) {
+                    // Logic to delete hovered edge
+                    contextEdgeId = hoverEdgeId;
+                    deleteEdge();
+                }
+            }
+        });
+
+        viewport.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const delta = -e.deltaY * 0.001;
+            const newZoom = Math.min(Math.max(0.1, view.zoom + delta), 5);
+            const mx = e.clientX - view.x;
+            const my = e.clientY - view.y;
+            const wMx = mx / view.zoom;
+            const wMy = my / view.zoom;
+            view.x -= wMx * (newZoom - view.zoom);
+            view.y -= wMy * (newZoom - view.zoom);
+            view.zoom = newZoom;
+            updateWorldTransform();
+        }, { passive: false });
+
+        viewport.addEventListener('contextmenu', (e) => {
+            if (connectionMode.active) { e.preventDefault(); cancelConnection(); return; }
+            if (e.target.closest('.node-wrapper') || e.target.classList.contains('connection-line')) return;
+            e.preventDefault();
+            contextMenuPos = { x: (e.clientX - view.x) / view.zoom, y: (e.clientY - view.y) / view.zoom };
+            showMenu(canvasMenu, e.clientX, e.clientY);
+        });
+
+        function handleNodeMouseDown(e) {
+            if (e.button !== 0) return;
+            
+            const node = e.currentTarget;
+            const isTextNode = node.dataset.type === 'text';
+            const isPostCallNode = node.dataset.type === 'post-call';
+            const isComplaintNode = node.dataset.type === 'complaint-board';
+            const isEditing = node.classList.contains('editing');
+
+            // Handle drag permissions based on node type
+            if (e.target.classList.contains('node-text')) {
+                if (!isTextNode) return; // Standard shape: don't drag on text
+                if (isTextNode && isEditing) return; // Text node editing: don't drag
+            }
+            
+            // Don't drag if clicking buttons inside post-call or complaint node
+            if ((isPostCallNode || isComplaintNode) && (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.closest('.post-call-btn') || e.target.closest('.complaint-add-btn') || e.target.classList.contains('item-delete-btn'))) return;
+            
+            e.stopPropagation(); 
+            if (connectionMode.active) return; 
+            isDraggingNode = true; activeNodeId = node.id;
+            lastMouse = { x: e.clientX, y: e.clientY };
+            node.dataset.hasDragged = "false";
+            hideMenus();
+        }
+
+        document.addEventListener('click', (e) => {
+            const wrapper = e.target.closest('.node-wrapper');
+            if (connectionMode.active) {
+                if (wrapper && wrapper.id !== connectionMode.sourceId) finalizeConnection(wrapper.id);
+                else cancelConnection();
+                return;
+            }
+            if (!wrapper) { if (!e.target.closest('.context-menu')) hideMenus(); return; }
+            if (wrapper.dataset.hasDragged === "true") return;
+            if (e.target.classList.contains('node-text')) return;
+            // Don't rotate special nodes
+            if (wrapper.dataset.type === 'post-call' || wrapper.dataset.type === 'complaint-board') return; 
+
+            const type = wrapper.dataset.type;
+            
+            // Text nodes don't rotate on single click
+            if (type !== 'text') {
+                const deg = (type==='rectangle'||type==='pill') ? 90 : 60;
+                wrapper.dataset.rotation = parseFloat(wrapper.dataset.rotation) + deg;
+                updateNodeTransform(wrapper);
+                saveState(); // Save on rotate
+            }
+        }, true);
+
+        function animateNodeHover(node, isHover) {
+            if (connectionMode.active) return;
+            node.dataset.scale = isHover ? 1.05 : 1;
+            updateNodeTransform(node);
+        }
+
+        function updateNodeTransform(node) {
+            const path = node.querySelector('path');
+            const rot = node.dataset.rotation;
+            const scale = node.dataset.scale;
+            // Text nodes don't have paths to rotate, apply to wrapper if needed, or skip
+            if (path) {
+                path.style.transform = `rotate(${rot}deg) scale(${scale})`;
+            } else if (node.dataset.type === 'text') {
+                // Scale effect for text nodes hover
+                node.style.transform = `translate(-50%, -50%) scale(${scale})`;
+            }
+        }
+
+        function updateWorldTransform() {
+            world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.zoom})`;
+            // Update Grid parallax if desired, but fixed bg works fine
+            document.querySelector('.grid-background').style.backgroundPosition = `${view.x}px ${view.y}px`;
+            document.querySelector('.grid-background').style.backgroundSize = `${40 * view.zoom}px ${40 * view.zoom}px`;
+        }
+
+        // --- Menus ---
+
+        let contextNodeId = null;
+        let contextEdgeId = null;
+
+        function showNodeMenu(e, nodeId) {
+            e.preventDefault(); e.stopPropagation();
+            if (connectionMode.active) { cancelConnection(); return; }
+            contextNodeId = nodeId;
+            
+            const node = document.getElementById(nodeId);
+            if (!node) return; // Safety check
+
+            const isTextNode = node.dataset.type === 'text';
+            const isPostCall = node.dataset.type === 'post-call';
+            const isComplaint = node.dataset.type === 'complaint-board';
+            
+            // Toggle visibility of Shape/Label options based on node type
+            const shapeItem = document.querySelector('#node-menu .has-submenu');
+            const labelItem = document.getElementById('text-toggle-item');
+            const completeItem = document.getElementById('complete-toggle-item');
+            
+            // Defaults
+            if(shapeItem) shapeItem.style.display = 'flex';
+            if(labelItem) labelItem.style.display = 'flex';
+            if(completeItem) completeItem.style.display = 'flex';
+
+            if (isTextNode || isPostCall || isComplaint) {
+                if(shapeItem) shapeItem.style.display = 'none';
+                if(labelItem) labelItem.style.display = 'none';
+                if(completeItem) completeItem.style.display = 'none';
+            } else {
+                // Standard Shape
+                const textEl = node.querySelector('.node-text');
+                const labelSpan = document.getElementById('text-toggle-label');
+                if (labelSpan && textEl) {
+                    labelSpan.innerText = textEl.classList.contains('visible') ? "Remove Label" : "Add Label";
+                }
+                
+                // Check complete status
+                const completeSpan = document.getElementById('complete-toggle-label');
+                if (completeSpan) {
+                    completeSpan.innerText = node.classList.contains('completed') ? "Mark Incomplete" : "Mark Complete";
+                }
+            }
+
+            showMenu(nodeMenu, e.clientX, e.clientY);
+        }
+
+        function showEdgeMenu(e, edgeId) {
+            e.preventDefault(); e.stopPropagation();
+            contextEdgeId = edgeId;
+            const edge = edges.find(e => e.id === edgeId);
+            if (edge) {
+                widthInput.value = edge.width; widthSlider.value = edge.width;
+                spacingInput.value = edge.spacing; spacingSlider.value = edge.spacing;
+            }
+            showMenu(edgeMenu, e.clientX, e.clientY);
+        }
+
+        function showMenu(menu, x, y) {
+            hideMenus();
+            let mx = x, my = y;
+            const mw = menu.offsetWidth || 200; 
+            const mh = menu.offsetHeight || 300; 
+            if (mx + mw > window.innerWidth) mx -= mw;
+            if (my + mh > window.innerHeight) my -= mh;
+            menu.style.left = `${mx}px`;
+            menu.style.top = `${my}px`;
+            menu.classList.add('visible');
+        }
+
+        function hideMenus() {
+            nodeMenu.classList.remove('visible');
+            canvasMenu.classList.remove('visible');
+            edgeMenu.classList.remove('visible');
+            textMenu.classList.remove('visible');
+        }
+
+        // --- Text Menu Logic ---
+        
+        window.formatText = function(cmd, value=null) {
+            document.execCommand(cmd, false, value);
+            if(activeTextNodeId) {
+                const wrapper = document.getElementById(activeTextNodeId);
+                fitNodeToText(wrapper);
+                if (cmd === 'foreColor') {
+                    const textEl = wrapper.querySelector('.node-text');
+                    textEl.focus();
+                }
+            }
+        };
+
+        function updateTextMenuPos() {
+            if(!activeTextNodeId) return;
+            const wrapper = document.getElementById(activeTextNodeId);
+            const textEl = wrapper.querySelector('.node-text');
+            if(!textEl) return;
+            const rect = textEl.getBoundingClientRect();
+            
+            textMenu.style.left = `${rect.left + (rect.width/2) - (textMenu.offsetWidth/2)}px`;
+            textMenu.style.top = `${rect.top - 70}px`; 
+        }
+
+        // --- Connection & Fork Logic ---
+
+        window.startConnection = function() {
+            if (!contextNodeId) return;
+            hideMenus();
+            const s = document.getElementById(contextNodeId);
+            s.classList.add('connecting-source');
+            connectionMode = { active: true, sourceId: contextNodeId, tempLine: null };
+            
+            const tempLine = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            tempLine.classList.add('temp-line');
+            const x = parseFloat(s.style.left); const y = parseFloat(s.style.top);
+            tempLine.dataset.x1 = x; tempLine.dataset.y1 = y;
+            tempLine.setAttribute('d', `M ${x} ${y} L ${x} ${y}`);
+            edgesLayer.appendChild(tempLine);
+            connectionMode.tempLine = tempLine;
+        };
+
+        function finalizeConnection(targetId) {
+            const sid = connectionMode.sourceId;
+            if (!edges.some(e => (e.source===sid && e.target===targetId) || (e.source===targetId && e.target===sid))) {
+                createEdge(sid, targetId);
+            }
+            cancelConnection();
+        }
+
+        function cancelConnection() {
+            if (connectionMode.sourceId) document.getElementById(connectionMode.sourceId)?.classList.remove('connecting-source');
+            connectionMode.tempLine?.remove();
+            connectionMode = { active: false, sourceId: null, tempLine: null };
+        }
+
+        // --- Fork Logic ---
+        
+        window.adjustForkCount = function(delta) {
+            forkCount += delta;
+            if (forkCount < 2) forkCount = 2;
+            if (forkCount > 10) forkCount = 10;
+            document.getElementById('fork-count-display').innerText = forkCount;
+        }
+
+        window.forkNode = function() {
+            if (!contextNodeId) return;
+            const source = document.getElementById(contextNodeId);
+            const x = parseFloat(source.style.left);
+            const y = parseFloat(source.style.top);
+            const type = source.dataset.type;
+            
+            const xOffset = 350;
+            const spacingY = 220;
+            const totalHeight = (forkCount - 1) * spacingY;
+            const startY = y - (totalHeight / 2);
+
+            for (let i = 0; i < forkCount; i++) {
+                const newY = startY + (i * spacingY);
+                const newNode = createNode(x + xOffset, newY, type);
+                createEdge(contextNodeId, newNode.id, 'metro-curved');
+            }
+            
+            hideMenus();
+        }
+
+        // --- Toggle Node Text ---
+        window.toggleNodeText = function() {
+            if(!contextNodeId) return;
+            const node = document.getElementById(contextNodeId);
+            const textEl = node.querySelector('.node-text');
+            if (textEl.classList.contains('visible')) {
+                textEl.classList.remove('visible');
+                textEl.innerText = "";
+                fitNodeToText(node); // Reset size
+            } else {
+                textEl.classList.add('visible');
+                setTimeout(() => textEl.focus(), 50);
+            }
+            hideMenus();
+            saveState();
+            triggerAutoUpdate();
+        }
+
+        // --- Toggle Complete ---
+        window.toggleNodeComplete = function() {
+            if(!contextNodeId) return;
+            const node = document.getElementById(contextNodeId);
+            if (node.classList.contains('completed')) {
+                node.classList.remove('completed');
+            } else {
+                node.classList.add('completed');
+            }
+            hideMenus();
+            saveState();
+            triggerAutoUpdate();
+        }
+
+        // --- Edge & Node Actions ---
+
+        window.deleteNode = (targetId = null) => {
+            const idToDelete = targetId || contextNodeId;
+            if (!idToDelete) return;
+
+            // Remove Node DOM
+            const node = document.getElementById(idToDelete);
+            if(node) node.remove();
+
+            // Find connected edges
+            const connectedEdges = edges.filter(e => e.source === idToDelete || e.target === idToDelete);
+            connectedEdges.forEach(e => e.element.remove());
+
+            // Remove from data array
+            edges = edges.filter(e => e.source !== idToDelete && e.target !== idToDelete);
+
+            hideMenus();
+            saveState();
+            triggerAutoUpdate();
+        }
+
+        window.changeEdgeType = (type) => { if(contextEdgeId) { const e=edges.find(ed=>ed.id===contextEdgeId); e.type=type; updateEdgePositions(e.source); } hideMenus(); saveState(); };
+        window.changeEdgeStyle = (style) => { if(contextEdgeId) { const e=edges.find(ed=>ed.id===contextEdgeId); e.style=style; updateEdgeAppearance(e); } hideMenus(); saveState(); };
+        window.deleteEdge = () => { if(contextEdgeId) { const i=edges.findIndex(e=>e.id===contextEdgeId); if(i>-1){ edges[i].element.remove(); edges.splice(i,1); } } hideMenus(); saveState(); };
+        
+        window.updateWidthFromInput = (v) => { widthSlider.value=v; applyEdgeParam('width', v); };
+        window.updateWidthFromSlider = (v) => { widthInput.value=v; applyEdgeParam('width', v); };
+        window.updateSpacingFromInput = (v) => { spacingSlider.value=v; applyEdgeParam('spacing', v); };
+        window.updateSpacingFromSlider = (v) => { spacingInput.value=v; applyEdgeParam('spacing', v); };
+        function applyEdgeParam(p, v) { if(contextEdgeId) { const e=edges.find(ed=>ed.id===contextEdgeId); e[p]=parseInt(v); updateEdgeAppearance(e); } saveState(); }
+
+        window.changeNodeColor = (c) => { 
+            if(contextNodeId) { 
+                const n=document.getElementById(contextNodeId).querySelector('path'); 
+                if(n) { n.style.fill=c; n.style.stroke=c; }
+            } 
+            hideMenus(); 
+            saveState(); 
+        };
+        window.changeEdgeColor = (c) => { 
+            if(contextEdgeId) { 
+                const e=edges.find(ed=>ed.id===contextEdgeId); 
+                e.color=c; updateEdgeAppearance(e); 
+            } 
+            hideMenus(); 
+            saveState(); 
+        };
+
+        window.addNodeAtCursor = () => { createNode(contextMenuPos.x, contextMenuPos.y, 'triangle'); hideMenus(); };
+        
+        window.changeNodeShape = (type) => { 
+            if(contextNodeId) {
+                const w = document.getElementById(contextNodeId);
+                // Can't change shape of text node to geometry or vice versa easily without complex logic, so restrictive
+                if(w.dataset.type === 'text') return;
+
+                const currentType = w.dataset.type; 
+                
+                if (currentType !== type) {
+                    w.dataset.rotation = 0; 
+                    w.dataset.type = type; 
+                    updateNodeTransform(w);
+                    animatePathMorph(w.querySelector('path'), CONFIG[currentType], CONFIG[type]); 
+                    fitNodeToText(w); 
+                }
+            } 
+            hideMenus(); 
+            saveState();
+        };
+
+        const easeInOutCubic = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        const lerp = (a, b, t) => a * (1 - t) + b * t;
+        function animatePathMorph(el, start, end) {
+            let st = null; const d = 600;
+            function step(t) {
+                if (!st) st = t;
+                const p = Math.min((t - st) / d, 1);
+                const e = easeInOutCubic(p);
+                let newD = "M ";
+                for(let i=0; i<6; i++) {
+                    const x = lerp(start.p[i].x, end.p[i].x, e);
+                    const y = lerp(start.p[i].y, end.p[i].y, e);
+                    newD += `${x} ${y} `; if(i<5) newD += "L ";
+                }
+                newD += "Z";
+                el.setAttribute('d', newD);
+                el.setAttribute('stroke-width', lerp(start.stroke, end.stroke, e));
+                if (p < 1) requestAnimationFrame(step);
+            }
+            requestAnimationFrame(step);
+        }
+
+        init();
+    </script>
+</body>
+</html>
